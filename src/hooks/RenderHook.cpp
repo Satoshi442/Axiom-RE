@@ -12,8 +12,10 @@
 #include "imgui.h"
 #include "imgui_impl_opengl3.h"
 
+#include <gum/gum.h>
+#include <gum/guminterceptor.h>
+
 #include "../ui/AxiomUI.h"
-#include "dobby.h"
 
 #define LOG_TAG "Axiom-RE"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
@@ -23,9 +25,8 @@ namespace {
 
 using EGLSwapBuffersFn = EGLBoolean (*)(EGLDisplay, EGLSurface);
 
-void* g_target = nullptr;
+GumInterceptor* g_interceptor = nullptr;
 EGLSwapBuffersFn g_original = nullptr;
-
 std::atomic<bool> g_imguiInitialized{false};
 
 void InitImGui() {
@@ -37,13 +38,10 @@ void InitImGui() {
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
 
     ImGui::StyleColorsDark();
-
     ImGui::GetIO().Fonts->AddFontDefault();
-
     ImGui_ImplOpenGL3_Init("#version 300 es");
 
     g_imguiInitialized = true;
-
     LOGI("ImGui initialized");
 }
 
@@ -67,9 +65,7 @@ EGLBoolean HookedEglSwapBuffers(EGLDisplay display, EGLSurface surface) {
             io.DeltaTime = 1.0f / 60.0f;
 
             ImGui::NewFrame();
-
             AxiomUI::Draw();
-
             ImGui::Render();
             ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
         }
@@ -78,8 +74,15 @@ EGLBoolean HookedEglSwapBuffers(EGLDisplay display, EGLSurface surface) {
     if (g_original) {
         return g_original(display, surface);
     }
-
     return EGL_FALSE;
+}
+
+// Frida GUM invocation callback
+void OnEglSwapBuffersEnter(GumInvocationContext* ic, gpointer user_data) {
+    EGLDisplay display = (EGLDisplay)gum_invocation_context_get_nth_argument(ic, 0);
+    EGLSurface surface = (EGLSurface)gum_invocation_context_get_nth_argument(ic, 1);
+
+    HookedEglSwapBuffers(display, surface);
 }
 
 }
@@ -87,38 +90,56 @@ EGLBoolean HookedEglSwapBuffers(EGLDisplay display, EGLSurface surface) {
 namespace RenderHook {
 
 bool Install() {
-    if (g_target) {
-        return true;
+    // Initialize Frida GUM
+    gum_init_embedded();
+
+    g_interceptor = gum_interceptor_obtain();
+    if (!g_interceptor) {
+        LOGE("Failed to obtain GumInterceptor");
+        return false;
     }
 
-    g_target = dlsym(RTLD_DEFAULT, "eglSwapBuffers");
-    if (!g_target) {
+    void* target = dlsym(RTLD_DEFAULT, "eglSwapBuffers");
+    if (!target) {
         LOGE("Failed to find eglSwapBuffers");
         return false;
     }
 
-    int result = DobbyHook(
-        g_target,
-        reinterpret_cast<void*>(&HookedEglSwapBuffers),
-        reinterpret_cast<void**>(&g_original)
+    gum_interceptor_begin_transaction(g_interceptor);
+
+    GumInterceptorResult result = gum_interceptor_attach(
+        g_interceptor,
+        target,
+        OnEglSwapBuffersEnter,
+        nullptr
     );
 
-    if (result != 0) {
-        LOGE("DobbyHook failed: %d", result);
+    gum_interceptor_end_transaction(g_interceptor);
+
+    if (result != GUM_ATTACH_OK) {
+        LOGE("GumInterceptor attach failed: %d", result);
         return false;
     }
 
-    LOGI("Render hook installed");
+    LOGI("Frida GUM render hook installed");
     return true;
 }
 
 void Uninstall() {
-    if (g_target) {
-        DobbyUnhook(g_target);
-        g_target = nullptr;
-        g_original = nullptr;
+    if (g_interceptor) {
+        void* target = dlsym(RTLD_DEFAULT, "eglSwapBuffers");
+        if (target) {
+            gum_interceptor_begin_transaction(g_interceptor);
+            gum_interceptor_detach(g_interceptor, target);
+            gum_interceptor_end_transaction(g_interceptor);
+        }
+
+        g_object_unref(g_interceptor);
+        g_interceptor = nullptr;
         LOGI("Render hook removed");
     }
+
+    gum_deinit_embedded();
 }
 
 }
