@@ -2,7 +2,7 @@ name: Build Axiom-RE
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [main, master]
   workflow_dispatch:
 
 jobs:
@@ -15,17 +15,44 @@ jobs:
       - name: Setup NDK
         uses: nttld/setup-ndk@v1
         with:
-          ndk-version: r25c
+          ndk-version: r27d
           add-to-path: false
 
-      - name: Download Dependencies automatically
+      - name: Install build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build zip xz-utils
+
+      - name: Download Dependencies
         run: |
           mkdir -p deps
-          git clone --depth 1 https://github.com/LiteLDev/preloader-android.git deps/preloader-android
-          git clone --branch v1.90.4 --depth 1 https://github.com/ocornut/imgui.git deps/imgui
-          git clone --depth 1 https://github.com/jmpews/dobby.git deps/dobby
 
-      - name: Build Mod
+          # Preloader
+          git clone --depth 1 https://github.com/LiteLDev/preloader-android.git deps/preloader-android
+
+          # Dear ImGui
+          git clone --branch v1.90.4 --depth 1 https://github.com/ocornut/imgui.git deps/imgui
+
+          # Capstone
+          git clone --depth 1 https://github.com/capstone-engine/capstone.git deps/capstone
+
+          # Frida GUM devkit (prebuilt for Android ARM64)
+          mkdir -p deps/frida-gum
+          curl -L -o frida-gum.tar.xz \
+            "https://github.com/frida/frida/releases/download/16.5.6/frida-gum-devkit-16.5.6-android-arm64.tar.xz"
+          tar -xf frida-gum.tar.xz -C deps/frida-gum
+          rm frida-gum.tar.xz
+
+      - name: Verify Dependencies
+        run: |
+          echo "=== Frida GUM ==="
+          ls deps/frida-gum/
+          echo "=== Capstone ==="
+          ls deps/capstone/include/capstone/ | head -5
+          echo "=== ImGui ==="
+          ls deps/imgui/imgui.h
+
+      - name: Build
         run: |
           export ANDROID_NDK_HOME=$ANDROID_NDK_ROOT
           cmake -S . -B build \
@@ -33,7 +60,8 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_TOOLCHAIN_FILE="$ANDROID_NDK_ROOT/build/cmake/android.toolchain.cmake" \
             -DANDROID_ABI=arm64-v8a \
-            -DANDROID_PLATFORM=android-28
+            -DANDROID_PLATFORM=android-28 \
+            -DANDROID_STL=c++_shared
           cmake --build build -j4
 
       - name: Package Levipack
