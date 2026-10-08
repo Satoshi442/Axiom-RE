@@ -6,7 +6,6 @@
 
 #include <EGL/egl.h>
 
-#define IMGUI_IMPL_OPENGL_ES3
 #include <GLES3/gl3.h>
 
 #include "imgui.h"
