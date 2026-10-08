@@ -17,30 +17,55 @@ target_include_directories(imgui PUBLIC deps/imgui deps/imgui/backends)
 target_compile_definitions(imgui PUBLIC IMGUI_IMPL_OPENGL_ES3)
 
 # ------------------------------------------------------------------
-# Dobby
+# Capstone (Disassembly)
 # ------------------------------------------------------------------
-set(DOBBY_BUILD_TESTS OFF CACHE BOOL "" FORCE)
-add_subdirectory(deps/dobby)
+set(CAPSTONE_BUILD_STATIC ON CACHE BOOL "" FORCE)
+set(CAPSTONE_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(CAPSTONE_BUILD_CSTOOL OFF CACHE BOOL "" FORCE)
+set(CAPSTONE_ARM64_SUPPORT ON CACHE BOOL "" FORCE)
+add_subdirectory(deps/capstone)
 
 # ------------------------------------------------------------------
-# Axiom-RE (UPDATED PATHS FOR YOUR NEW FOLDER STRUCTURE)
+# Frida GUM (prebuilt static library)
+# ------------------------------------------------------------------
+add_library(frida_gum STATIC IMPORTED)
+set_target_properties(frida_gum PROPERTIES
+    IMPORTED_LOCATION "${CMAKE_CURRENT_SOURCE_DIR}/deps/frida-gum/libfrida-gum.a"
+)
+
+# ------------------------------------------------------------------
+# Axiom-RE
 # ------------------------------------------------------------------
 add_library(axiom_re SHARED
     src/AxiomRE.cpp
     src/hooks/RenderHook.cpp
     src/ui/AxiomUI.cpp
+    src/analysis/Disasm.cpp
 )
 
 target_include_directories(axiom_re PRIVATE
     ${PRELOADER_ANDROID_ROOT}/include
     deps/imgui
     deps/imgui/backends
-    deps/dobby/include
-    src    # <--- THIS IS IMPORTANT: It lets AxiomRE.cpp find "hooks/" and "ui/"
+    deps/frida-gum/include
+    deps/capstone/include
+    src
 )
 
 target_compile_definitions(axiom_re PRIVATE IMGUI_IMPL_OPENGL_ES3)
 
 find_library(log-lib log)
-target_link_libraries(axiom_re PRIVATE imgui dobby EGL GLESv3 ${log-lib} dl)
-target_link_options(axiom_re PRIVATE -Wl,--unresolved-symbols=ignore-all)
+
+target_link_libraries(axiom_re PRIVATE
+    imgui
+    frida_gum
+    capstone
+    EGL
+    GLESv3
+    ${log-lib}
+    dl
+)
+
+target_link_options(axiom_re PRIVATE
+    -Wl,--unresolved-symbols=ignore-all
+)
