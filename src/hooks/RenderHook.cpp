@@ -11,8 +11,7 @@
 #include "imgui.h"
 #include "imgui_impl_opengl3.h"
 
-#include <gum/gum.h>
-#include <gum/guminterceptor.h>
+#include <frida-gum.h>
 
 #include "../ui/AxiomUI.h"
 
