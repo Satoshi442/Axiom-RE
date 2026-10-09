@@ -100,7 +100,7 @@ bool Install() {
     }
 
     // Create a call listener with enter/leave callbacks
-    g_listener = gum_make_call_listener(OnEnter, OnLeave, nullptr);
+    g_listener = gum_make_call_listener(OnEnter, OnLeave, nullptr, nullptr);
     if (!g_listener) {
         LOGE("Failed to create invocation listener");
         return false;
