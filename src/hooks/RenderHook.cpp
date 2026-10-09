@@ -5,7 +5,6 @@
 #include <atomic>
 
 #include <EGL/egl.h>
-
 #include <GLES3/gl3.h>
 
 #include "imgui.h"
@@ -24,7 +23,7 @@ namespace {
 using EGLSwapBuffersFn = EGLBoolean (*)(EGLDisplay, EGLSurface);
 
 GumInterceptor* g_interceptor = nullptr;
-EGLSwapBuffersFn g_original = nullptr;
+GumInvocationListener* g_listener = nullptr;
 std::atomic<bool> g_imguiInitialized{false};
 
 void InitImGui() {
@@ -43,7 +42,7 @@ void InitImGui() {
     LOGI("ImGui initialized");
 }
 
-EGLBoolean HookedEglSwapBuffers(EGLDisplay display, EGLSurface surface) {
+void DrawOverlay(EGLDisplay display, EGLSurface surface) {
     if (!g_imguiInitialized.load()) {
         InitImGui();
     }
@@ -68,19 +67,17 @@ EGLBoolean HookedEglSwapBuffers(EGLDisplay display, EGLSurface surface) {
             ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
         }
     }
-
-    if (g_original) {
-        return g_original(display, surface);
-    }
-    return EGL_FALSE;
 }
 
-// Frida GUM invocation callback
-void OnEglSwapBuffersEnter(GumInvocationContext* ic, gpointer user_data) {
+// Frida GUM invocation callbacks
+void OnEnter(GumInvocationContext* ic, gpointer user_data) {
     EGLDisplay display = (EGLDisplay)gum_invocation_context_get_nth_argument(ic, 0);
     EGLSurface surface = (EGLSurface)gum_invocation_context_get_nth_argument(ic, 1);
+    DrawOverlay(display, surface);
+}
 
-    HookedEglSwapBuffers(display, surface);
+void OnLeave(GumInvocationContext* ic, gpointer user_data) {
+    // Nothing needed on leave
 }
 
 }
@@ -88,7 +85,6 @@ void OnEglSwapBuffersEnter(GumInvocationContext* ic, gpointer user_data) {
 namespace RenderHook {
 
 bool Install() {
-    // Initialize Frida GUM
     gum_init_embedded();
 
     g_interceptor = gum_interceptor_obtain();
@@ -103,19 +99,24 @@ bool Install() {
         return false;
     }
 
-    gum_interceptor_begin_transaction(g_interceptor);
+    // Create a call listener with enter/leave callbacks
+    g_listener = gum_make_call_listener(OnEnter, OnLeave, nullptr);
+    if (!g_listener) {
+        LOGE("Failed to create invocation listener");
+        return false;
+    }
 
-    GumInterceptorResult result = gum_interceptor_attach(
+    gum_interceptor_begin_transaction(g_interceptor);
+    GumAttachReturn result = gum_interceptor_attach(
         g_interceptor,
         target,
-        OnEglSwapBuffersEnter,
+        g_listener,
         nullptr
     );
-
     gum_interceptor_end_transaction(g_interceptor);
 
     if (result != GUM_ATTACH_OK) {
-        LOGE("GumInterceptor attach failed: %d", result);
+        LOGE("gum_interceptor_attach failed: %d", result);
         return false;
     }
 
@@ -124,20 +125,22 @@ bool Install() {
 }
 
 void Uninstall() {
-    if (g_interceptor) {
-        void* target = dlsym(RTLD_DEFAULT, "eglSwapBuffers");
-        if (target) {
-            gum_interceptor_begin_transaction(g_interceptor);
-            gum_interceptor_detach(g_interceptor, target);
-            gum_interceptor_end_transaction(g_interceptor);
-        }
+    if (g_interceptor && g_listener) {
+        gum_interceptor_begin_transaction(g_interceptor);
+        gum_interceptor_detach(g_interceptor, g_listener);
+        gum_interceptor_end_transaction(g_interceptor);
 
+        g_object_unref(g_listener);
+        g_listener = nullptr;
+    }
+
+    if (g_interceptor) {
         g_object_unref(g_interceptor);
         g_interceptor = nullptr;
-        LOGI("Render hook removed");
     }
 
     gum_deinit_embedded();
+    LOGI("Render hook removed");
 }
 
 }
