@@ -15,7 +15,7 @@ namespace {
 namespace Disasm {
 
 bool Initialize() {
-    cs_err err = cs_open(CS_ARCH_ARM64, CS_MODE_ARM, &g_handle);
+    cs_err err = cs_open(CS_ARCH_AARCH64, CS_MODE_ARM, &g_handle);
     if (err != CS_ERR_OK) {
         LOGE("Capstone init failed: %s", cs_strerror(err));
         return false;
