@@ -46,14 +46,15 @@ jobs:
           tar -xf frida-gum.tar.xz -C deps/frida-gum
           rm frida-gum.tar.xz
           
-      - name: Verify Dependencies
+      - name: Verify frida-gum.h
         run: |
-          echo "=== Frida GUM ==="
-          ls deps/frida-gum/
-          echo "=== Capstone ==="
-          ls deps/capstone/include/capstone/ | head -5
-          echo "=== ImGui ==="
-          ls deps/imgui/imgui.h
+          echo "=== Frida GUM contents ==="
+          ls -la deps/frida-gum/
+          if [ ! -f deps/frida-gum/frida-gum.h ]; then
+            echo "ERROR: frida-gum.h not found"
+            exit 1
+          fi
+          echo "SUCCESS: frida-gum.h found"
 
       - name: Build
         run: |
