@@ -75,3 +75,4 @@ target_link_libraries(axiom_re PRIVATE
 target_link_options(axiom_re PRIVATE
     -Wl,--unresolved-symbols=ignore-all
 )
+)
