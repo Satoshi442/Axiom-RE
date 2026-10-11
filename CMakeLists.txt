@@ -43,9 +43,11 @@ set_target_properties(frida_gum PROPERTIES
 add_library(axiom_re SHARED
     src/AxiomRE.cpp
     src/hooks/RenderHook.cpp
+    src/hooks/TouchHook.cpp
     src/ui/AxiomUI.cpp
     src/analysis/Disasm.cpp
 )
+
 
 target_include_directories(axiom_re PRIVATE
     ${PRELOADER_ANDROID_ROOT}/include
@@ -68,6 +70,7 @@ target_link_libraries(axiom_re PRIVATE
     fmt::fmt
     EGL
     GLESv3
+    android 
     ${log-lib}
     dl
 )
