@@ -1,12 +1,17 @@
 cmake_minimum_required(VERSION 3.22)
 project(axiom_re LANGUAGES CXX)
+
 set(CMAKE_CXX_STANDARD 20)
-set(PRELOADER_ANDROID_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/deps/preloader-android")
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+set(PRELOADER_ANDROID_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/deps/preloader-android" CACHE PATH "Path to preloader-android")
 
 # ------------------------------------------------------------------
-# fmtlib (required by preloader-android)
+# Preloader (REAL library, like official examples)
 # ------------------------------------------------------------------
-add_subdirectory(deps/fmt)
+if(NOT TARGET preloader)
+    add_subdirectory("${PRELOADER_ANDROID_ROOT}" "${CMAKE_BINARY_DIR}/_preloader_android")
+endif()
 
 # ------------------------------------------------------------------
 # Dear ImGui
@@ -22,7 +27,7 @@ target_include_directories(imgui PUBLIC deps/imgui deps/imgui/backends)
 target_compile_definitions(imgui PUBLIC IMGUI_IMPL_OPENGL_ES3)
 
 # ------------------------------------------------------------------
-# Capstone (Disassembly)
+# Capstone
 # ------------------------------------------------------------------
 set(CAPSTONE_BUILD_STATIC ON CACHE BOOL "" FORCE)
 set(CAPSTONE_BUILD_TESTS OFF CACHE BOOL "" FORCE)
@@ -30,7 +35,7 @@ set(CAPSTONE_BUILD_CSTOOL OFF CACHE BOOL "" FORCE)
 add_subdirectory(deps/capstone)
 
 # ------------------------------------------------------------------
-# Frida GUM (prebuilt - headers are at root, no include/ subfolder)
+# Frida GUM (prebuilt)
 # ------------------------------------------------------------------
 add_library(frida_gum STATIC IMPORTED)
 set_target_properties(frida_gum PROPERTIES
@@ -48,10 +53,7 @@ add_library(axiom_re SHARED
     src/analysis/Disasm.cpp
 )
 
-
 target_include_directories(axiom_re PRIVATE
-    ${PRELOADER_ANDROID_ROOT}/include
-    deps/fmt/include
     deps/imgui
     deps/imgui/backends
     deps/frida-gum
@@ -64,18 +66,13 @@ target_compile_definitions(axiom_re PRIVATE IMGUI_IMPL_OPENGL_ES3)
 find_library(log-lib log)
 
 target_link_libraries(axiom_re PRIVATE
+    preloader
     imgui
     frida_gum
     capstone
-    fmt::fmt
     EGL
     GLESv3
-    android 
+    android
     ${log-lib}
     dl
 )
-
-target_link_options(axiom_re PRIVATE
-    -Wl,--unresolved-symbols=ignore-all
-)
-
