@@ -2,6 +2,7 @@
 #include <android/log.h>
 
 #include "hooks/RenderHook.h"
+#include "hooks/TouchHook.h"
 #include "ui/AxiomUI.h"
 #include "analysis/Disasm.h"
 
@@ -14,17 +15,16 @@ public:
     bool load(pl::mod::ModContext &context) {
         LOGI("=== Axiom-RE LOADING ===");
 
-        LOGI("Initializing Capstone...");
         Disasm::Initialize();
 
-        LOGI("Installing render hook...");
         if (!RenderHook::Install()) {
             LOGE("Failed to install render hook!");
-        } else {
-            LOGI("Render hook installed");
         }
 
-        // Auto-show the floating window (no mod menu needed)
+        if (!TouchHook::Install()) {
+            LOGE("Failed to install touch hook!");
+        }
+
         AxiomUI::Show();
 
         LOGI("=== Axiom-RE LOADED ===");
@@ -46,6 +46,7 @@ public:
     bool unload(pl::mod::ModContext &context) {
         LOGI("Axiom-RE UNLOADING");
         Disasm::Shutdown();
+        TouchHook::Uninstall();
         RenderHook::Uninstall();
         LOGI("Axiom-RE UNLOADED");
         return true;
