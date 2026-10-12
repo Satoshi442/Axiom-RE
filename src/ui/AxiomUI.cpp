@@ -259,7 +259,8 @@ void DrawMemoryTab() {
     ImGui::InputText("##memaddr", g_memAddr, sizeof(g_memAddr));
     ImGui::SameLine();
     if (ImGui::Button("Go")) {
-        g_viewAddr = strtoull(g_memAddr, nullptr, 16);
+        uint64_t a = strtoull(g_memAddr, nullptr, 16);
+        if (a) g_viewAddr = a;
     }
 
     ImGui::Separator();
@@ -286,6 +287,10 @@ void DrawMemoryTab() {
             line[off] = 0;
 
             ImGui::TextUnformatted(line);
+            if (ImGui::IsItemClicked()) {
+                g_inspAddrVal = addr;
+                snprintf(g_inspAddr, sizeof(g_inspAddr), "%llX", (unsigned long long)addr);
+            }
         }
         ImGui::EndChild();
     }
@@ -298,7 +303,8 @@ void DrawMemoryTab() {
     ImGui::InputText("##inspaddr", g_inspAddr, sizeof(g_inspAddr));
     ImGui::SameLine();
     if (ImGui::Button("Read")) {
-        g_inspAddrVal = strtoull(g_inspAddr, nullptr, 16);
+        uint64_t a = strtoull(g_inspAddr, nullptr, 16);
+        if (a) g_inspAddrVal = a;
     }
 
     const char* types[] = { "u8", "u16", "u32", "u64", "f32", "f64" };
@@ -380,7 +386,16 @@ void DrawSettingsTab() {
     ImGui::Separator();
     ImGui::TextWrapped("Drag the main window by its title bar. Resize it by dragging any edge or the bottom-right corner. Drag the AX ball to move it, tap it to toggle.");
 }
-
+ImGui::Separator();
+    ImGui::Text("Keyboard: %s", Keyboard::Status());
+    ImGui::Text("WantTextInput: %d   ShowCalls: %d",
+                (int)ImGui::GetIO().WantTextInput, Keyboard::ShowCalls());
+    if (ImGui::Button("Show (official)")) Keyboard::ShowOfficial();
+    ImGui::SameLine();
+    if (ImGui::Button("Show (JNI)")) Keyboard::ShowJni();
+    if (ImGui::Button("Hide (official)")) Keyboard::HideOfficial();
+    ImGui::SameLine();
+    if (ImGui::Button("Hide (JNI)")) Keyboard::HideJni();
 }
 
 namespace AxiomUI {
