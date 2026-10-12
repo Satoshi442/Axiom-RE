@@ -2,6 +2,7 @@
 #include <pl/Input.hpp>
 #include <android/log.h>
 #include <atomic>
+#include <Keyboard.h>
 
 #define LOG_TAG "Axiom-RE"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
@@ -22,6 +23,11 @@ bool TouchCallback(const pl::input::TouchEvent& event) {
     }
     return false; // false = don't block the game from receiving the touch
 }
+reg([](const pl::input::TouchEvent& e) -> bool {
+        Keyboard::PumpMainThreadJobs();     // <-- ADD THIS LINE
+        SetTouch(e.x, e.y, (e.action == 0 || e.action == 2), 1);
+        return false;
+    });
 }
 
 namespace TouchHook {
