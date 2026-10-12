@@ -143,13 +143,18 @@ void DrawFloatingToggle() {
         g_dragDist += fabsf(io.MouseDelta.x) + fabsf(io.MouseDelta.y);
     }
 
-    if (ImGui::IsItemReleased()) {
+    static bool wasActive = false;
+    bool isActive = ImGui::IsItemActive();
+
+    if (wasActive && !isActive) {
+        // finger just lifted off the ball
         if (g_dragDist < 12.0f) {
             g_visible = !g_visible.load();   // tap = toggle
         } else {
             SaveSettings();                  // drag end = save position
         }
     }
+    wasActive = isActive;
 
     ImVec2 mn = ImGui::GetItemRectMin();
     ImVec2 mx = ImGui::GetItemRectMax();
