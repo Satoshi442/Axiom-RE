@@ -408,6 +408,7 @@ void Draw() {
     }
 
     DrawFloatingToggle();
+    Keyboard::Frame();
 
     if (!g_visible.load()) return;
 
