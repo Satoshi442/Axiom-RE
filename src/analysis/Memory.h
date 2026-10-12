@@ -24,3 +24,12 @@ bool Write(uintptr_t addr, const void* in, size_t len);
 uintptr_t ModuleBase(const std::string& name);
 
 }
+
+struct MemoryRange {
+    uintptr_t start;
+    uintptr_t end;
+    std::string perms;
+    std::string path;
+};
+
+const std::vector<MemoryRange>& Ranges();
