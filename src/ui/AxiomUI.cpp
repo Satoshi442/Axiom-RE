@@ -98,6 +98,8 @@ static char g_inspAddr[32] = "0x0";
 static uint64_t g_inspAddrVal = 0;
 static int g_inspType = 2;
 static char g_inspWrite[32] = "";
+static float g_demoValue = 100.0f;
+static bool g_demoAnimate = true;
 
 // ---- Draggable ball state ----
 float g_dragDist = 0.0f;
@@ -163,6 +165,9 @@ void DrawFloatingToggle() {
 }
 
 void DrawMemoryTab() {
+    if (g_demoAnimate) {
+        g_demoValue = 100.0f + 50.0f * sinf((float)ImGui::GetTime() * 2.0f);
+    }
     const auto& mods = Memory::Modules();
 
     if (ImGui::Button("Refresh Modules")) {
@@ -268,6 +273,14 @@ void DrawMemoryTab() {
             if (!done) ImGui::TextColored(ImVec4(1,0.3f,0.3f,1), "Write failed (not writable)");
         }
     }
+    ImGui::Separator();
+    if (ImGui::Button("Demo Var (writable test)")) {
+        g_inspAddrVal = (uint64_t)&g_demoValue;
+        snprintf(g_inspAddr, sizeof(g_inspAddr), "%llX", (unsigned long long)g_inspAddrVal);
+        g_inspType = 4; // f32
+    }
+    ImGui::SameLine();
+    ImGui::Checkbox("Animate", &g_demoAnimate);
 }
 
 void DrawSettingsTab() {
