@@ -175,6 +175,61 @@ void DrawMemoryTab() {
     }
     const auto& mods = Memory::Modules();
 
+    // ---- Region picker for the selected module ----
+    if (g_modIdx >= 0 && g_modIdx < (int)mods.size()) {
+        const std::string& modPath = mods[g_modIdx].path;
+
+        static std::vector<int> regionIds;
+        static std::vector<std::string> regionLabels;
+        static std::string builtFor;
+        static int regionIdx = -1;
+
+        if (builtFor != modPath) {
+            regionIds.clear();
+            regionLabels.clear();
+            int i = 0;
+            for (const auto& r : Memory::Ranges()) {
+                if (r.path == modPath) {
+                    regionIds.push_back(i);
+                    char buf[160];
+                    snprintf(buf, sizeof(buf), "%s  %llX-%llX",
+                             r.perms.c_str(),
+                             (unsigned long long)r.start,
+                             (unsigned long long)r.end);
+                    regionLabels.push_back(buf);
+                }
+                i++;
+            }
+            regionIdx = -1;
+            builtFor = modPath;
+        }
+
+        ImGui::SetNextItemWidth(300.0f);
+        if (ImGui::BeginCombo("Region",
+                regionIdx >= 0 ? regionLabels[regionIdx].c_str() : "pick region...")) {
+            for (int i = 0; i < (int)regionLabels.size(); i++) {
+                if (ImGui::Selectable(regionLabels[i].c_str())) regionIdx = i;
+            }
+            ImGui::EndCombo();
+        }
+
+        if (regionIdx >= 0 && regionIdx < (int)regionIds.size()) {
+            const auto& r = Memory::Ranges()[regionIds[regionIdx]];
+
+            ImGui::SameLine();
+            if (ImGui::Button("Hex here")) {
+                g_viewAddr = r.start;
+                snprintf(g_memAddr, sizeof(g_memAddr), "%llX", (unsigned long long)r.start);
+            }
+
+            ImGui::SameLine();
+            if (ImGui::Button("Disasm here")) {
+                snprintf(g_addrInput, sizeof(g_addrInput), "%llX", (unsigned long long)r.start);
+                g_instructions = Disasm::Disassemble(r.start, 256, 20);
+            }
+        }
+}
+
     if (ImGui::Button("Refresh Modules")) {
         Memory::Refresh();
         g_modIdx = -1;
