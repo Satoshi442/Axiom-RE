@@ -5,6 +5,7 @@
 #include "hooks/TouchHook.h"
 #include "ui/AxiomUI.h"
 #include "analysis/Disasm.h"
+#include "analysis/Memory.h"
 
 #define LOG_TAG "Axiom-RE"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
@@ -15,18 +16,15 @@ public:
     bool load(pl::mod::ModContext &context) {
         LOGI("=== Axiom-RE LOADING ===");
 
+        AxiomUI::Init(context.modRootPath().string());
+
         Disasm::Initialize();
+        Memory::Refresh();
 
-        if (!RenderHook::Install()) {
-            LOGE("Failed to install render hook!");
-        }
-
-        if (!TouchHook::Install()) {
-            LOGE("Failed to install touch hook!");
-        }
+        if (!RenderHook::Install()) LOGE("Failed to install render hook!");
+        if (!TouchHook::Install())  LOGE("Touch hook failed (UI still works)");
 
         AxiomUI::Show();
-
         LOGI("=== Axiom-RE LOADED ===");
         return true;
     }
