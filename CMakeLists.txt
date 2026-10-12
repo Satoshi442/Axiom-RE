@@ -51,7 +51,9 @@ add_library(axiom_re SHARED
     src/hooks/TouchHook.cpp
     src/ui/AxiomUI.cpp
     src/analysis/Disasm.cpp
+    src/analysis/Memory.cpp
 )
+
 
 target_include_directories(axiom_re PRIVATE
     deps/imgui
