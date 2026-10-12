@@ -490,10 +490,49 @@ void Draw() {
             ImGui::EndTabItem();
         }
 
-        if (ImGui::BeginTabItem("Settings")) {
-            DrawSettingsTab();
+        if (ImGui::BeginTabItem("Disassembler")) {
+            ImGui::SetNextItemWidth(220.0f);
+            ImGui::InputText("##addr", g_addrInput, sizeof(g_addrInput));
+            ImGui::SameLine();
+            if (ImGui::Button("Disassemble")) {
+                uint64_t addr = strtoull(g_addrInput, nullptr, 16);
+                if (addr) g_instructions = Disasm::Disassemble(addr, 256, 15);
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Demo Fn")) {
+                uint64_t fn = (uint64_t)(void*)&Memory::Refresh;
+                snprintf(g_addrInput, sizeof(g_addrInput), "%llX", (unsigned long long)fn);
+                g_instructions = Disasm::Disassemble(fn, 256, 15);
+            }
+
+            ImGui::Separator();
+
+            if (ImGui::BeginChild("##disasm", ImVec2(0, 0), true)) {
+                for (const auto& inst : g_instructions) {
+                    ImVec4 color = ImVec4(0.9f, 0.9f, 0.9f, 1.0f);
+                    if (inst.mnemonic == "bl" || inst.mnemonic == "b")
+                        color = ImVec4(1.0f, 0.8f, 0.2f, 1.0f);
+                    else if (inst.mnemonic == "ret")
+                        color = ImVec4(1.0f, 0.3f, 0.3f, 1.0f);
+
+                    ImGui::PushStyleColor(ImGuiCol_Text, color);
+                    ImGui::Text("0x%llX:  %-6s %s",
+                                (unsigned long long)inst.address,
+                                inst.mnemonic.c_str(), inst.opStr.c_str());
+                    ImGui::PopStyleColor();
+
+                    // ---- 4d GOES HERE: tap a line to jump to that address ----
+                    if (ImGui::IsItemClicked()) {
+                        snprintf(g_addrInput, sizeof(g_addrInput), "%llX",
+                                 (unsigned long long)inst.address);
+                        g_instructions = Disasm::Disassemble(inst.address, 256, 15);
+                    }
+                }
+                ImGui::EndChild();
+            }
             ImGui::EndTabItem();
         }
+        
 
         ImGui::EndTabBar();
     }
