@@ -15,6 +15,7 @@ struct Range {
     uintptr_t start;
     uintptr_t end;
     char perms[5];
+    std::string path;
 };
 std::vector<Range> g_ranges;
 
@@ -39,8 +40,18 @@ void Refresh() {
                        &start, &end, perms, &offset, &inode, path);
         if (n < 3) continue;
 
-        g_ranges.push_back({(uintptr_t)start, (uintptr_t)end, {perms[0], perms[1], perms[2], perms[3], 0}});
+        g_ranges.push_back({(uintptr_t)start, (uintptr_t)end,
+                            {perms[0], perms[1], perms[2], perms[3], 0}, path});
 
+        const std::vector<MemoryRange>& Ranges() {
+    static std::vector<MemoryRange> out;
+    out.clear();
+    for (const auto& r : g_ranges) {
+        out.push_back({r.start, r.end, r.perms, r.path});
+    }
+    return out;
+        }
+        
         if (path[0] == '/' && strstr(path, ".so")) {
             const char* baseName = strrchr(path, '/');
             baseName = baseName ? baseName + 1 : path;
