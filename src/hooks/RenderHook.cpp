@@ -26,6 +26,7 @@ using EGLSwapBuffersFn = EGLBoolean (*)(EGLDisplay, EGLSurface);
 GumInterceptor* g_interceptor = nullptr;
 GumInvocationListener* g_listener = nullptr;
 std::atomic<bool> g_imguiInitialized{false};
+std::atomic<long long> g_frames{0};
 
 void InitImGui() {
     IMGUI_CHECKVERSION();
@@ -41,8 +42,7 @@ void InitImGui() {
 
     ImGui::GetIO().Fonts->AddFontDefault();
     ImGui_ImplOpenGL3_Init("#version 300 es");
-
-    std::atomic<long long> g_frames{0};
+    
     g_imguiInitialized = true;
     LOGI("ImGui initialized");
 }
