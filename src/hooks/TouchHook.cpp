@@ -1,5 +1,4 @@
 #include "TouchHook.h"
-#include "Keyboard.h"
 
 #include <android/log.h>
 #include <android/input.h>
@@ -84,7 +83,6 @@ bool TryOfficialApi() {
     auto reg = reinterpret_cast<RegFn>(fn);
 
     reg([](const pl::input::TouchEvent& e) -> bool {
-        Keyboard::PumpMainThreadJobs();
         SetTouch(e.x, e.y, (e.action == 0 || e.action == 2), 1);
         return false;
     });
