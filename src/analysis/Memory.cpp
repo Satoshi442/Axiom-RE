@@ -10,14 +10,7 @@
 namespace {
 
 std::vector<MemoryModule> g_modules;
-
-struct Range {
-    uintptr_t start;
-    uintptr_t end;
-    char perms[5];
-    std::string path;
-};
-std::vector<Range> g_ranges;
+std::vector<MemoryRange> g_ranges;
 
 }
 
@@ -40,18 +33,13 @@ void Refresh() {
                        &start, &end, perms, &offset, &inode, path);
         if (n < 3) continue;
 
-        g_ranges.push_back({(uintptr_t)start, (uintptr_t)end,
-                            {perms[0], perms[1], perms[2], perms[3], 0}, path});
+        MemoryRange r;
+        r.start = (uintptr_t)start;
+        r.end = (uintptr_t)end;
+        r.perms = perms;
+        r.path = path;
+        g_ranges.push_back(r);
 
-        const std::vector<MemoryRange>& Ranges() {
-    static std::vector<MemoryRange> out;
-    out.clear();
-    for (const auto& r : g_ranges) {
-        out.push_back({r.start, r.end, r.perms, r.path});
-    }
-    return out;
-        }
-        
         if (path[0] == '/' && strstr(path, ".so")) {
             const char* baseName = strrchr(path, '/');
             baseName = baseName ? baseName + 1 : path;
@@ -59,7 +47,7 @@ void Refresh() {
             bool found = false;
             for (auto& m : g_modules) {
                 if (m.path == path) {
-                    if (end > m.end) m.end = end;
+                    if (r.end > m.end) m.end = r.end;
                     found = true;
                     break;
                 }
@@ -80,8 +68,9 @@ void Refresh() {
 }
 
 const std::vector<MemoryModule>& Modules() { return g_modules; }
+const std::vector<MemoryRange>& Ranges() { return g_ranges; }
 
-static const Range* FindRange(uintptr_t addr, size_t len) {
+static const MemoryRange* FindRange(uintptr_t addr, size_t len) {
     for (const auto& r : g_ranges) {
         if (addr >= r.start && (addr + len) <= r.end) return &r;
     }
@@ -89,13 +78,13 @@ static const Range* FindRange(uintptr_t addr, size_t len) {
 }
 
 bool IsReadable(uintptr_t addr, size_t len) {
-    const Range* r = FindRange(addr, len);
-    return r && r->perms[0] == 'r';
+    const MemoryRange* r = FindRange(addr, len);
+    return r && !r->perms.empty() && r->perms[0] == 'r';
 }
 
 bool IsWritable(uintptr_t addr, size_t len) {
-    const Range* r = FindRange(addr, len);
-    return r && r->perms[1] == 'w';
+    const MemoryRange* r = FindRange(addr, len);
+    return r && r->perms.size() > 1 && r->perms[1] == 'w';
 }
 
 bool Read(uintptr_t addr, void* out, size_t len) {
