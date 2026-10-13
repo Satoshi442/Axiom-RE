@@ -10,16 +10,15 @@
 
 #include "imgui.h"
 
-#include "../hooks/TouchHook.h"
-#include "../hooks/Keyboard.h"   // <-- MUST exist for the Settings keyboard panel
-#include "../analysis/Memory.h"
 #include "../analysis/Disasm.h"
+#include "../analysis/Memory.h"
+#include "../hooks/TouchHook.h"
+#include "../hooks/Keyboard.h"
 
 namespace {
 
 std::atomic<bool> g_visible{true};
 
-// ---- Settings (persisted) ----
 struct Settings {
     float ballX = -1.0f;
     float ballY = -1.0f;
@@ -37,11 +36,14 @@ void LoadSettings() {
     if (g_settingsPath.empty()) return;
     FILE* f = fopen(g_settingsPath.c_str(), "r");
     if (!f) return;
+    int re = 1, mx = 0;
     fscanf(f, "%f %f %f %f %f %f %f %d %d",
            &g_settings.ballX, &g_settings.ballY,
            &g_settings.scale, &g_settings.alpha,
            &g_settings.accent[0], &g_settings.accent[1], &g_settings.accent[2],
-           (int*)&g_settings.resizeFromEdges, (int*)&g_settings.maximize);
+           &re, &mx);
+    g_settings.resizeFromEdges = (re != 0);
+    g_settings.maximize = (mx != 0);
     fclose(f);
 }
 
@@ -91,18 +93,17 @@ void ApplyStyle() {
 char g_addrInput[32] = "0x0";
 std::vector<DisasmInstruction> g_instructions;
 
-// ---- Memory tab state ----
-static int g_modIdx = -1;
-static char g_memAddr[32] = "0x0";
-static uint64_t g_viewAddr = 0;
-static char g_inspAddr[32] = "0x0";
-static uint64_t g_inspAddrVal = 0;
-static int g_inspType = 2;
-static char g_inspWrite[32] = "";
-static float g_demoValue = 100.0f;
-static bool g_demoAnimate = true;
+// ---- Memory state ----
+int g_modIdx = -1;
+char g_memAddr[32] = "0x0";
+uint64_t g_viewAddr = 0;
+char g_inspAddr[32] = "0x0";
+uint64_t g_inspAddrVal = 0;
+int g_inspType = 2;
+char g_inspWrite[32] = "";
+float g_demoValue = 100.0f;
+bool g_demoAnimate = true;
 
-// ---- Draggable ball state ----
 float g_dragDist = 0.0f;
 
 void DrawFloatingToggle() {
@@ -114,8 +115,6 @@ void DrawFloatingToggle() {
         g_settings.ballX = ds.x - 110.0f;
         g_settings.ballY = 60.0f;
     }
-
-    // clamp inside screen
     if (g_settings.ballX < 0.0f) g_settings.ballX = 0.0f;
     if (g_settings.ballY < 0.0f) g_settings.ballY = 0.0f;
     if (g_settings.ballX > ds.x - 80.0f) g_settings.ballX = ds.x - 80.0f;
@@ -146,13 +145,11 @@ void DrawFloatingToggle() {
 
     static bool wasActive = false;
     bool isActive = ImGui::IsItemActive();
-
     if (wasActive && !isActive) {
-        // finger just lifted off the ball
         if (g_dragDist < 12.0f) {
-            g_visible = !g_visible.load();   // tap = toggle
+            g_visible = !g_visible.load();
         } else {
-            SaveSettings();                  // drag end = save position
+            SaveSettings();
         }
     }
     wasActive = isActive;
@@ -174,9 +171,34 @@ void DrawMemoryTab() {
     if (g_demoAnimate) {
         g_demoValue = 100.0f + 50.0f * sinf((float)ImGui::GetTime() * 2.0f);
     }
+
     const auto& mods = Memory::Modules();
 
-    // ---- Region picker for the selected module ----
+    if (ImGui::Button("Refresh Modules")) {
+        Memory::Refresh();
+        g_modIdx = -1;
+    }
+
+    ImGui::SameLine();
+    const char* preview = (g_modIdx >= 0 && g_modIdx < (int)mods.size())
+                          ? mods[g_modIdx].name.c_str() : "Select module...";
+    ImGui::SetNextItemWidth(260.0f);
+    if (ImGui::BeginCombo("##mods", preview)) {
+        for (int i = 0; i < (int)mods.size(); i++) {
+            char label[320];
+            snprintf(label, sizeof(label), "%s @ %llX", mods[i].name.c_str(),
+                     (unsigned long long)mods[i].base);
+            if (ImGui::Selectable(label)) {
+                g_modIdx = i;
+                g_viewAddr = mods[i].base;
+                snprintf(g_memAddr, sizeof(g_memAddr), "%llX",
+                         (unsigned long long)g_viewAddr);
+            }
+        }
+        ImGui::EndCombo();
+    }
+
+    // ---- Region picker ----
     if (g_modIdx >= 0 && g_modIdx < (int)mods.size()) {
         const std::string& modPath = mods[g_modIdx].path;
 
@@ -206,15 +228,17 @@ void DrawMemoryTab() {
         }
 
         ImGui::SetNextItemWidth(300.0f);
-        if (ImGui::BeginCombo("Region",
-                regionIdx >= 0 ? regionLabels[regionIdx].c_str() : "pick region...")) {
+        const char* rprev = (regionIdx >= 0 && regionIdx < (int)regionLabels.size())
+                            ? regionLabels[regionIdx].c_str() : "pick region...";
+        if (ImGui::BeginCombo("Region", rprev)) {
             for (int i = 0; i < (int)regionLabels.size(); i++) {
                 if (ImGui::Selectable(regionLabels[i].c_str())) regionIdx = i;
             }
             ImGui::EndCombo();
         }
 
-        if (regionIdx >= 0 && regionIdx < (int)regionIds.size()) {
+        if (regionIdx >= 0 && regionIdx < (int)regionIds.size() &&
+            regionIds[regionIdx] < (int)Memory::Ranges().size()) {
             const auto& r = Memory::Ranges()[regionIds[regionIdx]];
 
             ImGui::SameLine();
@@ -229,31 +253,6 @@ void DrawMemoryTab() {
                 g_instructions = Disasm::Disassemble(r.start, 256, 20);
             }
         }
-}
-
-    if (ImGui::Button("Refresh Modules")) {
-        Memory::Refresh();
-        g_modIdx = -1;
-    }
-
-    ImGui::SameLine();
-    const char* preview = (g_modIdx >= 0 && g_modIdx < (int)mods.size())
-                          ? mods[g_modIdx].name.c_str() : "Select module...";
-    ImGui::SetNextItemWidth(260.0f);
-    if (ImGui::BeginCombo("##mods", preview)) {
-        for (int i = 0; i < (int)mods.size(); i++) {
-            char label[320];
-            snprintf(label, sizeof(label), "%s @ %llX", mods[i].name.c_str(),
-                     (unsigned long long)mods[i].base);
-            if (ImGui::Selectable(label)) {
-                g_modIdx = i;
-                g_viewAddr = mods[i].base;
-                snprintf(g_memAddr, sizeof(g_memAddr), "%llX",
-                         (unsigned long long)g_viewAddr);
-            }
-            ImGui::SetItemDefaultFocus();
-        }
-        ImGui::EndCombo();
     }
 
     ImGui::SetNextItemWidth(200.0f);
@@ -266,7 +265,6 @@ void DrawMemoryTab() {
 
     ImGui::Separator();
 
-    // Hex dump
     if (ImGui::BeginChild("##hex", ImVec2(0, 220.0f), true)) {
         char line[160];
         for (int row = 0; row < 16; row++) {
@@ -298,7 +296,6 @@ void DrawMemoryTab() {
 
     ImGui::Separator();
 
-    // Value inspector / writer
     ImGui::Text("Inspector:");
     ImGui::SetNextItemWidth(200.0f);
     ImGui::InputText("##inspaddr", g_inspAddr, sizeof(g_inspAddr));
@@ -340,11 +337,12 @@ void DrawMemoryTab() {
             if (!done) ImGui::TextColored(ImVec4(1,0.3f,0.3f,1), "Write failed (not writable)");
         }
     }
+
     ImGui::Separator();
     if (ImGui::Button("Demo Var (writable test)")) {
         g_inspAddrVal = (uint64_t)&g_demoValue;
         snprintf(g_inspAddr, sizeof(g_inspAddr), "%llX", (unsigned long long)g_inspAddrVal);
-        g_inspType = 4; // f32
+        g_inspType = 4;
     }
     ImGui::SameLine();
     ImGui::Checkbox("Animate", &g_demoAnimate);
@@ -356,19 +354,15 @@ void DrawSettingsTab() {
     if (ImGui::SliderFloat("UI Scale", &g_settings.scale, 0.8f, 2.0f, "%.2f")) {
         io.FontGlobalScale = g_settings.scale;
     }
-
     if (ImGui::SliderFloat("Window Alpha", &g_settings.alpha, 0.30f, 1.0f, "%.2f")) {
         ApplyStyle();
     }
-
     if (ImGui::ColorEdit3("Accent Color", g_settings.accent)) {
         ApplyStyle();
     }
-
     if (ImGui::Checkbox("Resize From Edges", &g_settings.resizeFromEdges)) {
         io.ConfigWindowsResizeFromEdges = g_settings.resizeFromEdges;
     }
-
     ImGui::Checkbox("Maximize Main Window", &g_settings.maximize);
 
     if (ImGui::Button("Reset Ball Position")) {
@@ -376,27 +370,26 @@ void DrawSettingsTab() {
         g_settings.ballX = ds.x - 110.0f;
         g_settings.ballY = 60.0f;
     }
-
     ImGui::SameLine();
     if (ImGui::Button("Save Settings")) {
         SaveSettings();
-        ImGui::SameLine();
-        ImGui::TextColored(ImVec4(0.3f,1,0.3f,1), "Saved!");
     }
 
     ImGui::Separator();
-    ImGui::TextWrapped("Drag the main window by its title bar. Resize it by dragging any edge or the bottom-right corner. Drag the AX ball to move it, tap it to toggle.");
-}
-ImGui::Separator();
     ImGui::Text("Keyboard: %s", Keyboard::Status());
     ImGui::Text("WantTextInput: %d   ShowCalls: %d",
-                (int)ImGui::GetIO().WantTextInput, Keyboard::ShowCalls());
+                (int)io.WantTextInput, Keyboard::ShowCalls());
     if (ImGui::Button("Show (official)")) Keyboard::ShowOfficial();
     ImGui::SameLine();
     if (ImGui::Button("Show (JNI)")) Keyboard::ShowJni();
     if (ImGui::Button("Hide (official)")) Keyboard::HideOfficial();
     ImGui::SameLine();
     if (ImGui::Button("Hide (JNI)")) Keyboard::HideJni();
+
+    ImGui::Separator();
+    ImGui::TextWrapped("Drag the main window by its title bar. Resize by dragging edges or the bottom-right corner. Drag the AX ball to move it, tap it to toggle.");
+}
+
 }
 
 namespace AxiomUI {
@@ -423,8 +416,9 @@ void Draw() {
         first = false;
     }
 
-    DrawFloatingToggle();
     Keyboard::Frame();
+
+    DrawFloatingToggle();
 
     if (!g_visible.load()) return;
 
@@ -470,35 +464,6 @@ void Draw() {
                 uint64_t addr = strtoull(g_addrInput, nullptr, 16);
                 if (addr) g_instructions = Disasm::Disassemble(addr, 256, 15);
             }
-
-            ImGui::Separator();
-
-            if (ImGui::BeginChild("##disasm", ImVec2(0, 0), true)) {
-                for (const auto& inst : g_instructions) {
-                    ImVec4 color = ImVec4(0.9f, 0.9f, 0.9f, 1.0f);
-                    if (inst.mnemonic == "bl" || inst.mnemonic == "b")
-                        color = ImVec4(1.0f, 0.8f, 0.2f, 1.0f);
-                    else if (inst.mnemonic == "ret")
-                        color = ImVec4(1.0f, 0.3f, 0.3f, 1.0f);
-                    ImGui::PushStyleColor(ImGuiCol_Text, color);
-                    ImGui::Text("0x%llX:  %-6s %s",
-                                (unsigned long long)inst.address,
-                                inst.mnemonic.c_str(), inst.opStr.c_str());
-                    ImGui::PopStyleColor();
-                }
-                ImGui::EndChild();
-            }
-            ImGui::EndTabItem();
-        }
-
-        if (ImGui::BeginTabItem("Disassembler")) {
-            ImGui::SetNextItemWidth(220.0f);
-            ImGui::InputText("##addr", g_addrInput, sizeof(g_addrInput));
-            ImGui::SameLine();
-            if (ImGui::Button("Disassemble")) {
-                uint64_t addr = strtoull(g_addrInput, nullptr, 16);
-                if (addr) g_instructions = Disasm::Disassemble(addr, 256, 15);
-            }
             ImGui::SameLine();
             if (ImGui::Button("Demo Fn")) {
                 uint64_t fn = (uint64_t)(void*)&Memory::Refresh;
@@ -522,7 +487,6 @@ void Draw() {
                                 inst.mnemonic.c_str(), inst.opStr.c_str());
                     ImGui::PopStyleColor();
 
-                    // ---- 4d GOES HERE: tap a line to jump to that address ----
                     if (ImGui::IsItemClicked()) {
                         snprintf(g_addrInput, sizeof(g_addrInput), "%llX",
                                  (unsigned long long)inst.address);
@@ -533,7 +497,11 @@ void Draw() {
             }
             ImGui::EndTabItem();
         }
-        
+
+        if (ImGui::BeginTabItem("Settings")) {
+            DrawSettingsTab();
+            ImGui::EndTabItem();
+        }
 
         ImGui::EndTabBar();
     }
