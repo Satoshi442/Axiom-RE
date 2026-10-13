@@ -10,9 +10,10 @@
 
 #include "imgui.h"
 
-#include "../analysis/Disasm.h"
-#include "../analysis/Memory.h"
 #include "../hooks/TouchHook.h"
+#include "../hooks/Keyboard.h"   // <-- MUST exist for the Settings keyboard panel
+#include "../analysis/Memory.h"
+#include "../analysis/Disasm.h"
 
 namespace {
 
