@@ -42,11 +42,13 @@ void InitImGui() {
     ImGui::GetIO().Fonts->AddFontDefault();
     ImGui_ImplOpenGL3_Init("#version 300 es");
 
+    std::atomic<long long> g_frames{0};
     g_imguiInitialized = true;
     LOGI("ImGui initialized");
 }
 
 void DrawOverlay(EGLDisplay display, EGLSurface surface) {
+    g_frames++;
     if (!g_imguiInitialized.load()) {
         InitImGui();
     }
@@ -132,5 +134,6 @@ void Uninstall() {
     }
     gum_deinit_embedded();
 }
+long long FrameCount() { return g_frames.load(); }
 
 }
