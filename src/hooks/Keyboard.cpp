@@ -147,10 +147,7 @@ bool Install() {
 }
 
 void Frame() {
-    ImGuiIO& io = ImGui::GetIO();
-    bool want = io.WantTextInput;
-    if (want && !g_shown) { DoShow(); g_shown = true; }
-    else if (!want && g_shown) { DoHide(); g_shown = false; }
+    // auto show/hide disabled during touch diagnosis; use manual buttons in Settings
 }
 
 void PumpMainThreadJobs() {
