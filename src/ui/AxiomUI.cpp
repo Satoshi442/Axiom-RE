@@ -1,4 +1,5 @@
 #include "AxiomUI.h"
+#include "../hooks/RenderHook.h"
 
 #include <atomic>
 #include <cmath>
@@ -105,6 +106,24 @@ float g_demoValue = 100.0f;
 bool g_demoAnimate = true;
 
 float g_dragDist = 0.0f;
+
+void DrawDiagnostics() {
+    ImGui::SetNextWindowPos(ImVec2(8.0f, 8.0f), ImGuiCond_Always);
+    ImGuiWindowFlags f =
+        ImGuiWindowFlags_NoTitleBar |
+        ImGuiWindowFlags_NoInputs |
+        ImGuiWindowFlags_NoScrollbar |
+        ImGuiWindowFlags_NoSavedSettings |
+        ImGuiWindowFlags_AlwaysAutoResize;
+    ImGui::Begin("##diag", nullptr, f);
+    ImGuiIO& io = ImGui::GetIO();
+    ImGui::Text("frames:%lld  src:%d", RenderHook::FrameCount(), TouchHook::Source());
+    ImGui::Text("raw  x:%.0f y:%.0f down:%d", TouchHook::X(), TouchHook::Y(), (int)TouchHook::Down());
+    ImGui::Text("io   x:%.0f y:%.0f down:%d", io.MousePos.x, io.MousePos.y, (int)io.MouseDown[0]);
+    ImGui::Text("want:%d show:%d", (int)io.WantTextInput, Keyboard::ShowCalls());
+    ImGui::Text("kb: %s", Keyboard::Status());
+    ImGui::End();
+}
 
 void DrawFloatingToggle() {
     ImGuiIO& io = ImGui::GetIO();
@@ -419,6 +438,7 @@ void Draw() {
     Keyboard::Frame();
 
     DrawFloatingToggle();
+    DrawDiagnostics();
 
     if (!g_visible.load()) return;
 
