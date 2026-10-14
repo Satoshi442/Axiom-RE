@@ -535,6 +535,14 @@ void Draw() {
     }
 
     ImGui::End();
+
+    // Red crosshair = where ImGui thinks your finger is
+    ImGuiIO& io2 = ImGui::GetIO();
+    ImDrawList* fg = ImGui::GetForegroundDrawList();
+    ImVec2 p = io2.MousePos;
+    fg->AddCircle(p, 16.0f, IM_COL32(255, 60, 60, 255), 0, 3.0f);
+    fg->AddLine(ImVec2(p.x - 26.0f, p.y), ImVec2(p.x + 26.0f, p.y), IM_COL32(255, 60, 60, 255), 2.0f);
+    fg->AddLine(ImVec2(p.x, p.y - 26.0f), ImVec2(p.x, p.y + 26.0f), IM_COL32(255, 60, 60, 255), 2.0f);
 }
 
 }
