@@ -462,6 +462,14 @@ void Draw() {
     if (ImGui::BeginTabBar("AxiomTabs")) {
 
         if (ImGui::BeginTabItem("Dashboard")) {
+            const char* rots[] = { "Auto", "Rot 0", "Rot 1", "Rot 2", "Rot 3" };
+            static int rotSel = TouchHook::RotMode() + 1;
+            if (ImGui::Combo("Touch orient", &rotSel, rots, 5)) {
+                TouchHook::SetRotMode(rotSel - 1);
+            }
+            ImGui::Text("raw: %.0f, %.0f   ->   ui: %.0f, %.0f",
+                        TouchHook::RawX(), TouchHook::RawY(),
+                        TouchHook::X(), TouchHook::Y());
             ImGui::TextColored(ImVec4(0.3f, 1.0f, 0.3f, 1.0f), "Status: ACTIVE");
             ImGui::Separator();
             ImGui::Text("Hook engine: Frida GUM");
