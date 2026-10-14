@@ -58,6 +58,7 @@ void DrawOverlay(EGLDisplay display, EGLSurface surface) {
     eglQuerySurface(display, surface, EGL_WIDTH, &width);
     eglQuerySurface(display, surface, EGL_HEIGHT, &height);
     if (width <= 0 || height <= 0) return;
+    TouchHook::SetDisplaySize((float)width, (float)height);
 
     ImGui_ImplOpenGL3_NewFrame();
 
