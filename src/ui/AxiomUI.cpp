@@ -1,5 +1,4 @@
 #include "AxiomUI.h"
-#include "../hooks/RenderHook.h"
 
 #include <atomic>
 #include <cmath>
@@ -9,12 +8,18 @@
 #include <string>
 #include <vector>
 
+#include <android/log.h>
+
 #include "imgui.h"
 
 #include "../analysis/Disasm.h"
 #include "../analysis/Memory.h"
 #include "../hooks/TouchHook.h"
 #include "../hooks/Keyboard.h"
+#include "../hooks/RenderHook.h"
+
+#define LOG_TAG "Axiom-RE"
+#define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
 
 namespace {
 
@@ -38,13 +43,14 @@ void LoadSettings() {
     FILE* f = fopen(g_settingsPath.c_str(), "r");
     if (!f) return;
     int re = 1, mx = 0;
-    fscanf(f, "%f %f %f %f %f %f %f %d %d",
-           &g_settings.ballX, &g_settings.ballY,
-           &g_settings.scale, &g_settings.alpha,
-           &g_settings.accent[0], &g_settings.accent[1], &g_settings.accent[2],
-           &re, &mx);
-    g_settings.resizeFromEdges = (re != 0);
-    g_settings.maximize = (mx != 0);
+    if (fscanf(f, "%f %f %f %f %f %f %f %d %d",
+               &g_settings.ballX, &g_settings.ballY,
+               &g_settings.scale, &g_settings.alpha,
+               &g_settings.accent[0], &g_settings.accent[1], &g_settings.accent[2],
+               &re, &mx) == 9) {
+        g_settings.resizeFromEdges = (re != 0);
+        g_settings.maximize = (mx != 0);
+    }
     fclose(f);
 }
 
@@ -90,11 +96,10 @@ void ApplyStyle() {
     c[ImGuiCol_ResizeGripActive] = ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
 }
 
-// ---- Disassembler state ----
+// ---- state ----
 char g_addrInput[32] = "0x0";
 std::vector<DisasmInstruction> g_instructions;
 
-// ---- Memory state ----
 int g_modIdx = -1;
 char g_memAddr[32] = "0x0";
 uint64_t g_viewAddr = 0;
@@ -104,27 +109,64 @@ int g_inspType = 2;
 char g_inspWrite[32] = "";
 float g_demoValue = 100.0f;
 bool g_demoAnimate = true;
-
 float g_dragDist = 0.0f;
 
-void DrawDiagnostics() {
-    ImGui::SetNextWindowPos(ImVec2(8.0f, 8.0f), ImGuiCond_Always);
-    ImGuiWindowFlags f =
-        ImGuiWindowFlags_NoTitleBar |
-        ImGuiWindowFlags_NoInputs |
-        ImGuiWindowFlags_NoScrollbar |
-        ImGuiWindowFlags_NoSavedSettings |
-        ImGuiWindowFlags_AlwaysAutoResize;
-    ImGui::Begin("##diag", nullptr, f);
+// ============================================================
+// Diagnostics: PURE DRAW LIST. No ImGui window. Cannot block
+// input and cannot poison the window stack.
+// ============================================================
+void WriteDiagFile() {
+    static int counter = 0;
+    if ((counter++ % 60) != 0) return;
+    FILE* f = fopen("/storage/emulated/0/Android/media/org.levimc.launcher/axiom_diag.txt", "w");
+    if (!f) f = fopen("/sdcard/Android/media/org.levimc.launcher/axiom_diag.txt", "w");
+    if (!f) return;
     ImGuiIO& io = ImGui::GetIO();
-    ImGui::Text("frames:%lld  src:%d", RenderHook::FrameCount(), TouchHook::Source());
-    ImGui::Text("raw  x:%.0f y:%.0f down:%d", TouchHook::X(), TouchHook::Y(), (int)TouchHook::Down());
-    ImGui::Text("io   x:%.0f y:%.0f down:%d", io.MousePos.x, io.MousePos.y, (int)io.MouseDown[0]);
-    ImGui::Text("want:%d show:%d", (int)io.WantTextInput, Keyboard::ShowCalls());
-    ImGui::Text("kb: %s", Keyboard::Status());
-    ImGui::End();
+    fprintf(f,
+            "frames=%lld\nsrc=%d\nrot=%d\n"
+            "raw_x=%.0f\nraw_y=%.0f\nraw_down=%d\n"
+            "io_x=%.0f\nio_y=%.0f\nio_down=%d\n"
+            "disp=%.0fx%.0f\n",
+            RenderHook::FrameCount(), TouchHook::Source(), TouchHook::RotMode(),
+            TouchHook::RawX(), TouchHook::RawY(), (int)TouchHook::Down(),
+            io.MousePos.x, io.MousePos.y, (int)io.MouseDown[0],
+            io.DisplaySize.x, io.DisplaySize.y);
+    fclose(f);
 }
 
+void DrawDiagnosticsOverlay() {
+    ImDrawList* fg = ImGui::GetForegroundDrawList();
+    ImGuiIO& io = ImGui::GetIO();
+    float fs = ImGui::GetFontSize() * 1.5f;
+    ImFont* font = ImGui::GetFont();
+    ImVec2 pos(12.0f, 12.0f);
+    char buf[220];
+
+    snprintf(buf, sizeof(buf), "frames:%lld src:%d rot:%d",
+             RenderHook::FrameCount(), TouchHook::Source(), TouchHook::RotMode());
+    fg->AddText(font, fs, pos, IM_COL32(120, 255, 120, 255), buf); pos.y += fs + 4;
+
+    snprintf(buf, sizeof(buf), "raw:%.0f,%.0f d:%d",
+             TouchHook::RawX(), TouchHook::RawY(), (int)TouchHook::Down());
+    fg->AddText(font, fs, pos, IM_COL32(255, 255, 255, 255), buf); pos.y += fs + 4;
+
+    snprintf(buf, sizeof(buf), "io :%.0f,%.0f d:%d",
+             io.MousePos.x, io.MousePos.y, (int)io.MouseDown[0]);
+    fg->AddText(font, fs, pos, IM_COL32(255, 255, 255, 255), buf); pos.y += fs + 4;
+
+    snprintf(buf, sizeof(buf), "disp:%.0fx%.0f", io.DisplaySize.x, io.DisplaySize.y);
+    fg->AddText(font, fs, pos, IM_COL32(255, 255, 255, 255), buf);
+
+    // Red crosshair = where ImGui thinks your finger is
+    ImVec2 p = io.MousePos;
+    fg->AddCircle(p, 16.0f, IM_COL32(255, 60, 60, 255), 0, 3.0f);
+    fg->AddLine(ImVec2(p.x - 26.0f, p.y), ImVec2(p.x + 26.0f, p.y), IM_COL32(255, 60, 60, 255), 2.0f);
+    fg->AddLine(ImVec2(p.x, p.y - 26.0f), ImVec2(p.x, p.y + 26.0f), IM_COL32(255, 60, 60, 255), 2.0f);
+
+    WriteDiagFile();
+}
+
+// ============================================================
 void DrawFloatingToggle() {
     ImGuiIO& io = ImGui::GetIO();
     ImVec2 ds = io.DisplaySize;
@@ -142,20 +184,14 @@ void DrawFloatingToggle() {
     ImGui::SetNextWindowPos(ImVec2(g_settings.ballX, g_settings.ballY), ImGuiCond_Always);
     ImGui::SetNextWindowSize(ImVec2(80.0f, 80.0f));
 
-    ImGuiWindowFlags flags =
-        ImGuiWindowFlags_NoTitleBar |
-        ImGuiWindowFlags_NoResize |
-        ImGuiWindowFlags_NoScrollbar |
-        ImGuiWindowFlags_NoSavedSettings |
-        ImGuiWindowFlags_NoCollapse |
-        ImGuiWindowFlags_NoBackground;
-
-    ImGui::Begin("##AxiomBall", nullptr, flags);
+    ImGui::Begin("##AxiomBall", nullptr,
+                 ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
+                 ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoSavedSettings |
+                 ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoBackground);
 
     ImGui::InvisibleButton("##ballbtn", ImVec2(80.0f, 80.0f));
 
     if (ImGui::IsItemActivated()) g_dragDist = 0.0f;
-
     if (ImGui::IsItemActive()) {
         g_settings.ballX += io.MouseDelta.x;
         g_settings.ballY += io.MouseDelta.y;
@@ -165,18 +201,14 @@ void DrawFloatingToggle() {
     static bool wasActive = false;
     bool isActive = ImGui::IsItemActive();
     if (wasActive && !isActive) {
-        if (g_dragDist < 12.0f) {
-            g_visible = !g_visible.load();
-        } else {
-            SaveSettings();
-        }
+        if (g_dragDist < 12.0f) g_visible = !g_visible.load();
+        else SaveSettings();
     }
     wasActive = isActive;
 
     ImVec2 mn = ImGui::GetItemRectMin();
     ImVec2 mx = ImGui::GetItemRectMax();
     ImVec2 center((mn.x + mx.x) * 0.5f, (mn.y + mx.y) * 0.5f);
-
     ImDrawList* dl = ImGui::GetWindowDrawList();
     dl->AddCircleFilled(center, 36.0f, AccentU32());
     dl->AddCircle(center, 36.0f, IM_COL32(255, 255, 255, 200), 0, 2.0f);
@@ -186,6 +218,7 @@ void DrawFloatingToggle() {
     ImGui::End();
 }
 
+// ============================================================
 void DrawMemoryTab() {
     if (g_demoAnimate) {
         g_demoValue = 100.0f + 50.0f * sinf((float)ImGui::GetTime() * 2.0f);
@@ -197,7 +230,6 @@ void DrawMemoryTab() {
         Memory::Refresh();
         g_modIdx = -1;
     }
-
     ImGui::SameLine();
     const char* preview = (g_modIdx >= 0 && g_modIdx < (int)mods.size())
                           ? mods[g_modIdx].name.c_str() : "Select module...";
@@ -210,35 +242,29 @@ void DrawMemoryTab() {
             if (ImGui::Selectable(label)) {
                 g_modIdx = i;
                 g_viewAddr = mods[i].base;
-                snprintf(g_memAddr, sizeof(g_memAddr), "%llX",
-                         (unsigned long long)g_viewAddr);
+                snprintf(g_memAddr, sizeof(g_memAddr), "%llX", (unsigned long long)g_viewAddr);
             }
         }
         ImGui::EndCombo();
     }
 
-    // ---- Region picker ----
     if (g_modIdx >= 0 && g_modIdx < (int)mods.size()) {
         const std::string& modPath = mods[g_modIdx].path;
-
         static std::vector<int> regionIds;
         static std::vector<std::string> regionLabels;
         static std::string builtFor;
         static int regionIdx = -1;
 
         if (builtFor != modPath) {
-            regionIds.clear();
-            regionLabels.clear();
+            regionIds.clear(); regionLabels.clear();
             int i = 0;
             for (const auto& r : Memory::Ranges()) {
                 if (r.path == modPath) {
                     regionIds.push_back(i);
-                    char buf[160];
-                    snprintf(buf, sizeof(buf), "%s  %llX-%llX",
-                             r.perms.c_str(),
-                             (unsigned long long)r.start,
-                             (unsigned long long)r.end);
-                    regionLabels.push_back(buf);
+                    char b[160];
+                    snprintf(b, sizeof(b), "%s %llX-%llX", r.perms.c_str(),
+                             (unsigned long long)r.start, (unsigned long long)r.end);
+                    regionLabels.push_back(b);
                 }
                 i++;
             }
@@ -250,22 +276,19 @@ void DrawMemoryTab() {
         const char* rprev = (regionIdx >= 0 && regionIdx < (int)regionLabels.size())
                             ? regionLabels[regionIdx].c_str() : "pick region...";
         if (ImGui::BeginCombo("Region", rprev)) {
-            for (int i = 0; i < (int)regionLabels.size(); i++) {
+            for (int i = 0; i < (int)regionLabels.size(); i++)
                 if (ImGui::Selectable(regionLabels[i].c_str())) regionIdx = i;
-            }
             ImGui::EndCombo();
         }
 
         if (regionIdx >= 0 && regionIdx < (int)regionIds.size() &&
             regionIds[regionIdx] < (int)Memory::Ranges().size()) {
             const auto& r = Memory::Ranges()[regionIds[regionIdx]];
-
             ImGui::SameLine();
             if (ImGui::Button("Hex here")) {
                 g_viewAddr = r.start;
                 snprintf(g_memAddr, sizeof(g_memAddr), "%llX", (unsigned long long)r.start);
             }
-
             ImGui::SameLine();
             if (ImGui::Button("Disasm here")) {
                 snprintf(g_addrInput, sizeof(g_addrInput), "%llX", (unsigned long long)r.start);
@@ -283,19 +306,15 @@ void DrawMemoryTab() {
     }
 
     ImGui::Separator();
-
     if (ImGui::BeginChild("##hex", ImVec2(0, 220.0f), true)) {
         char line[160];
         for (int row = 0; row < 16; row++) {
             uint64_t addr = g_viewAddr + (uint64_t)row * 16;
             uint8_t buf[16];
             bool ok = Memory::Read(addr, buf, 16);
-
             int off = snprintf(line, sizeof(line), "%012llX  ", (unsigned long long)addr);
-            for (int i = 0; i < 16; i++) {
-                if (ok) off += snprintf(line + off, sizeof(line) - off, "%02X ", buf[i]);
-                else    off += snprintf(line + off, sizeof(line) - off, "?? ");
-            }
+            for (int i = 0; i < 16; i++)
+                off += snprintf(line + off, sizeof(line) - off, ok ? "%02X " : "?? ", ok ? buf[i] : 0);
             off += snprintf(line + off, sizeof(line) - off, " ");
             for (int i = 0; i < 16; i++) {
                 char ch = ok ? (char)buf[i] : '?';
@@ -303,7 +322,6 @@ void DrawMemoryTab() {
                 line[off++] = ch;
             }
             line[off] = 0;
-
             ImGui::TextUnformatted(line);
             if (ImGui::IsItemClicked()) {
                 g_inspAddrVal = addr;
@@ -314,7 +332,6 @@ void DrawMemoryTab() {
     }
 
     ImGui::Separator();
-
     ImGui::Text("Inspector:");
     ImGui::SetNextItemWidth(200.0f);
     ImGui::InputText("##inspaddr", g_inspAddr, sizeof(g_inspAddr));
@@ -353,7 +370,7 @@ void DrawMemoryTab() {
                 case 4: { float v = strtof(g_inspWrite, nullptr);                  done = Memory::Write(g_inspAddrVal, &v, 4); break; }
                 case 5: { double v = strtod(g_inspWrite, nullptr);                 done = Memory::Write(g_inspAddrVal, &v, 8); break; }
             }
-            if (!done) ImGui::TextColored(ImVec4(1,0.3f,0.3f,1), "Write failed (not writable)");
+            if (!done) ImGui::TextColored(ImVec4(1, 0.3f, 0.3f, 1), "Write failed (not writable)");
         }
     }
 
@@ -367,46 +384,36 @@ void DrawMemoryTab() {
     ImGui::Checkbox("Animate", &g_demoAnimate);
 }
 
+// ============================================================
 void DrawSettingsTab() {
     ImGuiIO& io = ImGui::GetIO();
 
-    if (ImGui::SliderFloat("UI Scale", &g_settings.scale, 0.8f, 2.0f, "%.2f")) {
+    if (ImGui::SliderFloat("UI Scale", &g_settings.scale, 0.8f, 2.0f, "%.2f"))
         io.FontGlobalScale = g_settings.scale;
-    }
-    if (ImGui::SliderFloat("Window Alpha", &g_settings.alpha, 0.30f, 1.0f, "%.2f")) {
+    if (ImGui::SliderFloat("Window Alpha", &g_settings.alpha, 0.30f, 1.0f, "%.2f"))
         ApplyStyle();
-    }
-    if (ImGui::ColorEdit3("Accent Color", g_settings.accent)) {
+    if (ImGui::ColorEdit3("Accent Color", g_settings.accent))
         ApplyStyle();
-    }
-    if (ImGui::Checkbox("Resize From Edges", &g_settings.resizeFromEdges)) {
+    if (ImGui::Checkbox("Resize From Edges", &g_settings.resizeFromEdges))
         io.ConfigWindowsResizeFromEdges = g_settings.resizeFromEdges;
-    }
     ImGui::Checkbox("Maximize Main Window", &g_settings.maximize);
 
     if (ImGui::Button("Reset Ball Position")) {
-        ImVec2 ds = io.DisplaySize;
-        g_settings.ballX = ds.x - 110.0f;
+        g_settings.ballX = io.DisplaySize.x - 110.0f;
         g_settings.ballY = 60.0f;
     }
     ImGui::SameLine();
-    if (ImGui::Button("Save Settings")) {
-        SaveSettings();
-    }
+    if (ImGui::Button("Save Settings")) SaveSettings();
 
     ImGui::Separator();
     ImGui::Text("Keyboard: %s", Keyboard::Status());
-    ImGui::Text("WantTextInput: %d   ShowCalls: %d",
-                (int)io.WantTextInput, Keyboard::ShowCalls());
+    ImGui::Text("ShowCalls: %d", Keyboard::ShowCalls());
     if (ImGui::Button("Show (official)")) Keyboard::ShowOfficial();
     ImGui::SameLine();
     if (ImGui::Button("Show (JNI)")) Keyboard::ShowJni();
     if (ImGui::Button("Hide (official)")) Keyboard::HideOfficial();
     ImGui::SameLine();
     if (ImGui::Button("Hide (JNI)")) Keyboard::HideJni();
-
-    ImGui::Separator();
-    ImGui::TextWrapped("Drag the main window by its title bar. Resize by dragging edges or the bottom-right corner. Drag the AX ball to move it, tap it to toggle.");
 }
 
 }
@@ -436,113 +443,51 @@ void Draw() {
     }
 
     Keyboard::Frame();
-
     DrawFloatingToggle();
-    DrawDiagnostics();
 
-    if (!g_visible.load()) return;
-
-    ImGuiIO& io = ImGui::GetIO();
-    if (g_settings.maximize) {
-        ImGui::SetNextWindowPos(ImVec2(0, 0), ImGuiCond_Always);
-        ImGui::SetNextWindowSize(io.DisplaySize, ImGuiCond_Always);
-    } else {
-        ImGui::SetNextWindowSize(ImVec2(520.0f, 420.0f), ImGuiCond_FirstUseEver);
-    }
-
-    ImGui::Begin("Axiom-RE Framework", nullptr, ImGuiWindowFlags_NoCollapse);
-
-    if (ImGui::Button("Hide")) g_visible = false;
-    ImGui::SameLine();
-    ImGui::Text("Touch src:%d  x:%.0f y:%.0f",
-                TouchHook::Source(), TouchHook::X(), TouchHook::Y());
-
-    ImGui::Separator();
-
-    if (ImGui::BeginTabBar("AxiomTabs")) {
-
-        if (ImGui::BeginTabItem("Dashboard")) {
-            const char* rots[] = { "Auto", "Rot 0", "Rot 1", "Rot 2", "Rot 3" };
-            static int rotSel = TouchHook::RotMode() + 1;
-            if (ImGui::Combo("Touch orient", &rotSel, rots, 5)) {
-                TouchHook::SetRotMode(rotSel - 1);
-            }
-            ImGui::Text("raw: %.0f, %.0f   ->   ui: %.0f, %.0f",
-                        TouchHook::RawX(), TouchHook::RawY(),
-                        TouchHook::X(), TouchHook::Y());
-            ImGui::TextColored(ImVec4(0.3f, 1.0f, 0.3f, 1.0f), "Status: ACTIVE");
-            ImGui::Separator();
-            ImGui::Text("Hook engine: Frida GUM");
-            ImGui::Text("Disassembler: Capstone");
-            ImGui::Text("Modules loaded: %zu", Memory::Modules().size());
-            ImGui::Text("Touch: %s", TouchHook::Source() > 0 ? "CONNECTED" : "NONE");
-            ImGui::EndTabItem();
+    if (g_visible.load()) {
+        ImGuiIO& io = ImGui::GetIO();
+        if (g_settings.maximize) {
+            ImGui::SetNextWindowPos(ImVec2(0, 0), ImGuiCond_Always);
+            ImGui::SetNextWindowSize(io.DisplaySize, ImGuiCond_Always);
+        } else {
+            ImGui::SetNextWindowSize(ImVec2(520.0f, 420.0f), ImGuiCond_FirstUseEver);
         }
 
-        if (ImGui::BeginTabItem("Memory")) {
-            DrawMemoryTab();
-            ImGui::EndTabItem();
-        }
+        ImGui::Begin("Axiom-RE Framework", nullptr, ImGuiWindowFlags_NoCollapse);
 
-        if (ImGui::BeginTabItem("Disassembler")) {
-            ImGui::SetNextItemWidth(220.0f);
-            ImGui::InputText("##addr", g_addrInput, sizeof(g_addrInput));
-            ImGui::SameLine();
-            if (ImGui::Button("Disassemble")) {
-                uint64_t addr = strtoull(g_addrInput, nullptr, 16);
-                if (addr) g_instructions = Disasm::Disassemble(addr, 256, 15);
+        if (ImGui::Button("Hide")) g_visible = false;
+        ImGui::SameLine();
+        ImGui::Text("Touch src:%d  x:%.0f y:%.0f",
+                    TouchHook::Source(), TouchHook::X(), TouchHook::Y());
+        ImGui::Separator();
+
+        if (ImGui::BeginTabBar("AxiomTabs")) {
+            if (ImGui::BeginTabItem("Dashboard")) {
+                const char* rots[] = { "Auto", "Rot 0", "Rot 1", "Rot 2", "Rot 3" };
+                static int rotSel = TouchHook::RotMode() + 1;
+                if (ImGui::Combo("Touch orient", &rotSel, rots, 5))
+                    TouchHook::SetRotMode(rotSel - 1);
+                ImGui::Text("raw %.0f,%.0f -> ui %.0f,%.0f",
+                            TouchHook::RawX(), TouchHook::RawY(),
+                            TouchHook::X(), TouchHook::Y());
+                ImGui::Separator();
+                ImGui::TextColored(ImVec4(0.3f, 1.0f, 0.3f, 1.0f), "Status: ACTIVE");
+                ImGui::Text("Hook engine: Frida GUM");
+                ImGui::Text("Modules: %zu", Memory::Modules().size());
+                ImGui::TextWrapped("Red crosshair = where ImGui sees your finger. If it doesn't follow your finger, change Touch orient until it does.");
+                ImGui::EndTabItem();
             }
-            ImGui::SameLine();
-            if (ImGui::Button("Demo Fn")) {
-                uint64_t fn = (uint64_t)(void*)&Memory::Refresh;
-                snprintf(g_addrInput, sizeof(g_addrInput), "%llX", (unsigned long long)fn);
-                g_instructions = Disasm::Disassemble(fn, 256, 15);
-            }
-
-            ImGui::Separator();
-
-            if (ImGui::BeginChild("##disasm", ImVec2(0, 0), true)) {
-                for (const auto& inst : g_instructions) {
-                    ImVec4 color = ImVec4(0.9f, 0.9f, 0.9f, 1.0f);
-                    if (inst.mnemonic == "bl" || inst.mnemonic == "b")
-                        color = ImVec4(1.0f, 0.8f, 0.2f, 1.0f);
-                    else if (inst.mnemonic == "ret")
-                        color = ImVec4(1.0f, 0.3f, 0.3f, 1.0f);
-
-                    ImGui::PushStyleColor(ImGuiCol_Text, color);
-                    ImGui::Text("0x%llX:  %-6s %s",
-                                (unsigned long long)inst.address,
-                                inst.mnemonic.c_str(), inst.opStr.c_str());
-                    ImGui::PopStyleColor();
-
-                    if (ImGui::IsItemClicked()) {
-                        snprintf(g_addrInput, sizeof(g_addrInput), "%llX",
-                                 (unsigned long long)inst.address);
-                        g_instructions = Disasm::Disassemble(inst.address, 256, 15);
-                    }
+            if (ImGui::BeginTabItem("Memory")) { DrawMemoryTab(); ImGui::EndTabItem(); }
+            if (ImGui::BeginTabItem("Disassembler")) {
+                ImGui::SetNextItemWidth(220.0f);
+                ImGui::InputText("##addr", g_addrInput, sizeof(g_addrInput));
+                ImGui::SameLine();
+                if (ImGui::Button("Disassemble")) {
+                    uint64_t a = strtoull(g_addrInput, nullptr, 16);
+                    if (a) g_instructions = Disasm::Disassemble(a, 256, 15);
                 }
-                ImGui::EndChild();
-            }
-            ImGui::EndTabItem();
-        }
-
-        if (ImGui::BeginTabItem("Settings")) {
-            DrawSettingsTab();
-            ImGui::EndTabItem();
-        }
-
-        ImGui::EndTabBar();
-    }
-
-    ImGui::End();
-
-    // Red crosshair = where ImGui thinks your finger is
-    ImGuiIO& io2 = ImGui::GetIO();
-    ImDrawList* fg = ImGui::GetForegroundDrawList();
-    ImVec2 p = io2.MousePos;
-    fg->AddCircle(p, 16.0f, IM_COL32(255, 60, 60, 255), 0, 3.0f);
-    fg->AddLine(ImVec2(p.x - 26.0f, p.y), ImVec2(p.x + 26.0f, p.y), IM_COL32(255, 60, 60, 255), 2.0f);
-    fg->AddLine(ImVec2(p.x, p.y - 26.0f), ImVec2(p.x, p.y + 26.0f), IM_COL32(255, 60, 60, 255), 2.0f);
-}
-
-}
+                ImGui::SameLine();
+                if (ImGui::Button("Demo Fn")) {
+                    uint64_t fn = (uint64_t)(void*)&Memory::Refresh;
+         
