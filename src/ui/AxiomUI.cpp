@@ -490,4 +490,100 @@ void Draw() {
                 ImGui::SameLine();
                 if (ImGui::Button("Demo Fn")) {
                     uint64_t fn = (uint64_t)(void*)&Memory::Refresh;
-         
+                    snprintf(g_addrInput, sizeof(g_addrInput), "%llX", (unsigned long long)fn);
+                if (ImGui::Combo("Touch orient", &rotSel, rots, 5))
+        } else {
+                static int rotSel = TouchHook::RotMode() + 1;
+        ApplyStyle();
+                ImGui::SetNextItemWidth(220.0f);
+    ImGui::SameLine();
+                ImGui::SameLine();
+    LoadSettings();
+
+                ImGui::SameLine();
+    if (ImGui::Button("Hide (JNI)")) Keyboard::HideJni();
+
+void Show() { g_visible = true; }
+namespace AxiomUI {
+        if (!g_iniPath.empty()) io.IniFilename = g_iniPath.c_str();
+
+        ImGui::SameLine();
+                    if (a) g_instructions = Disasm::Disassemble(a, 256, 15);
+    if (ImGui::Button("Show (official)")) Keyboard::ShowOfficial();
+    if (first) {
+                    g_instructions = Disasm::Disassemble(fn, 256, 15);
+            ImGui::SetNextWindowSize(ImVec2(520.0f, 420.0f), ImGuiCond_FirstUseEver);
+    if (ImGui::ColorEdit3("Accent Color", g_settings.accent))
+    if (ImGui::Button("Save Settings")) SaveSettings();
+                if (ImGui::Button("Demo Fn")) {
+    if (ImGui::Button("Reset Ball Position")) {
+                if (ImGui::Button("Disassemble")) {
+}
+    if (g_visible.load()) {
+void Hide() { g_visible = false; }
+
+        first = false;
+bool IsVisible() { return g_visible.load(); }
+        ImGui::Text("Touch src:%d  x:%.0f y:%.0f",
+    ImGui::SameLine();
+        ApplyStyle();
+                }
+        }
+        ApplyStyle();
+
+                    uint64_t fn = (uint64_t)(void*)&Memory::Refresh;
+        g_settings.ballX = io.DisplaySize.x - 110.0f;
+
+        ImGuiIO& io = ImGui::GetIO();
+
+void Init(const std::string& modRoot) {
+    }
+                    TouchHook::Source(), TouchHook::X(), TouchHook::Y());
+    if (ImGui::Button("Show (JNI)")) Keyboard::ShowJni();
+        ImGuiIO& io = ImGui::GetIO();
+                ImGui::Separator();
+
+    if (ImGui::Checkbox("Resize From Edges", &g_settings.resizeFromEdges))
+    ImGui::Separator();
+        g_settings.ballY = 60.0f;
+}
+        if (g_settings.maximize) {
+void Draw() {
+    g_settingsPath = modRoot + "/axiom_settings.txt";
+
+        ImGui::Separator();
+    if (ImGui::Button("Hide (official)")) Keyboard::HideOfficial();
+        io.ConfigWindowsResizeFromEdges = g_settings.resizeFromEdges;
+                if (ImGui::BeginChild("##disasm", ImVec2(0, 0), true)) {
+        ImGui::Begin("Axiom-RE Framework", nullptr, ImGuiWindowFlags_NoCollapse);
+        io.ConfigWindowsResizeFromEdges = g_settings.resizeFromEdges;
+    ImGui::Text("Keyboard: %s", Keyboard::Status());
+            ImGui::SetNextWindowPos(ImVec2(0, 0), ImGuiCond_Always);
+    Keyboard::Frame();
+                    for (const auto& inst : g_instructions) {
+
+                        ImVec4 color = ImVec4(0.9f, 0.9f, 0.9f, 1.0f);
+                        if (inst.mnemonic == "bl" || inst.mnemonic == "b") color = ImVec4(1.0f, 0.8f, 0.2f, 1.0f);
+                        else if (inst.mnemonic == "ret") color = ImVec4(1.0f, 0.3f, 0.3f, 1.0f);
+                        ImGui::PushStyleColor(ImGuiCol_Text, color);
+                        ImGui::Text("0x%llX:  %-6s %s", (unsigned long long)inst.address,
+                                    inst.mnemonic.c_str(), inst.opStr.c_str());
+                        ImGui::PopStyleColor();
+                        if (ImGui::IsItemClicked()) {
+                            snprintf(g_addrInput, sizeof(g_addrInput), "%llX", (unsigned long long)inst.address);
+                            g_instructions = Disasm::Disassemble(inst.address, 256, 15);
+                        }
+                    }
+                    ImGui::EndChild();
+                }
+                ImGui::EndTabItem();
+            }
+            if (ImGui::BeginTabItem("Settings")) { DrawSettingsTab(); ImGui::EndTabItem(); }
+            ImGui::EndTabBar();
+        }
+
+        ImGui::End();
+    }
+
+    DrawDiagnosticsOverlay();
+}
