@@ -6,7 +6,6 @@
 #include "ui/AxiomUI.h"
 #include "analysis/Disasm.h"
 #include "analysis/Memory.h"
-#include "hooks/Keyboard.h"
 
 #define LOG_TAG "Axiom-RE"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
@@ -24,9 +23,7 @@ public:
 
         if (!RenderHook::Install()) LOGE("Failed to install render hook!");
         if (!TouchHook::Install())  LOGE("Touch hook failed (UI still works)");
-        
-        Keyboard::Install();
-        
+
         AxiomUI::Show();
         LOGI("=== Axiom-RE LOADED ===");
         return true;
