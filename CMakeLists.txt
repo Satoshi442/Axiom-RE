@@ -49,7 +49,6 @@ add_library(axiom_re SHARED
     src/AxiomRE.cpp
     src/hooks/RenderHook.cpp
     src/hooks/TouchHook.cpp
-    src/hooks/Keyboard.cpp
     src/ui/AxiomUI.cpp
     src/analysis/Disasm.cpp
     src/analysis/Memory.cpp
