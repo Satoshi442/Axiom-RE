@@ -20,40 +20,20 @@
 
 namespace {
 
-std::atomic<float> g_rawX{0.0f};
-std::atomic<float> g_rawY{0.0f};
+std::atomic<float> g_x{0.0f};
+std::atomic<float> g_y{0.0f};
 std::atomic<bool> g_down{false};
 std::atomic<int> g_source{0};
-
-std::atomic<float> g_dw{1080.0f};
-std::atomic<float> g_dh{1920.0f};
-std::atomic<int> g_rot{-1};   // -1 = auto
 
 GumInterceptor* g_intc = nullptr;
 std::vector<GumInvocationListener*> g_listeners;
 std::vector<void*> g_targets;
 
 void SetTouch(float x, float y, bool down, int src) {
-    g_rawX.store(x);
-    g_rawY.store(y);
+    g_x.store(x);
+    g_y.store(y);
     g_down.store(down);
     g_source.store(src);
-}
-
-void Transform(float vx, float vy, float& ox, float& oy) {
-    float W = g_dw.load();
-    float H = g_dh.load();
-    int m = g_rot.load();
-    if (m < 0) {
-        // auto: identity if already in bounds, else assume 90° rotation
-        m = (vx <= W && vy <= H) ? 0 : 2;
-    }
-    switch (m) {
-        case 1:  ox = vy;      oy = vx;      break;
-        case 2:  ox = W - vy;  oy = vx;      break;
-        case 3:  ox = vy;      oy = H - vx;  break;
-        default: ox = vx;      oy = vy;      break;
-    }
 }
 
 bool MotionDown(int32_t maskedAction) {
@@ -86,7 +66,7 @@ bool Attach(void* target, GumInvocationCallback enter, GumInvocationCallback lea
     return true;
 }
 
-// ---------- Strategy 1: official pl::input API ----------
+// ---------- Strategy 1: official pl::input API via dlsym ----------
 bool TryOfficialApi() {
     const char* names[] = {
         "_ZN2pl5input21registerTouchCallbackENSt6__ndk18functionIFbRKNS0_10TouchEventEEE",
@@ -129,8 +109,9 @@ bool TryInputQueue() {
     return true;
 }
 
-// ---------- Strategy 3: JNI touch entry ----------
+// ---------- Strategy 3: JNI touch entry auto-discovery ----------
 void OnJniTouchEnter(GumInvocationContext* ic, gpointer) {
+    // Typical JNI: (JNIEnv*, jobject, MotionEvent) and MotionEvent native ptr == AInputEvent*
     AInputEvent* ev = (AInputEvent*)gum_invocation_context_get_nth_argument(ic, 2);
     if (!ev) return;
     if (AInputEvent_getType(ev) != AINPUT_EVENT_TYPE_MOTION) return;
@@ -144,10 +125,13 @@ std::vector<std::string> LoadedLibs() {
     if (!f) return libs;
     char line[512];
     while (fgets(line, sizeof(line), f)) {
+        char* path = strrchr(line, '/');
+        if (!path) continue;
+        // reconstruct full path from first '/' after perms
         char* start = strchr(line, '/');
         if (!start) continue;
         size_t len = strlen(start);
-        while (len > 0 && (start[len - 1] == '\n' || start[len - 1] == ' ')) len--;
+        while (len > 0 && (start[len-1] == '\n' || start[len-1] == ' ')) len--;
         std::string p(start, len);
         if (p.find(".so") == std::string::npos) continue;
         bool dup = false;
@@ -185,23 +169,16 @@ bool TryJniCandidates() {
 
 namespace TouchHook {
 
-float RawX() { return g_rawX.load(); }
-float RawY() { return g_rawY.load(); }
+float X() { return g_x.load(); }
+float Y() { return g_y.load(); }
 bool Down() { return g_down.load(); }
 int Source() { return g_source.load(); }
-
-float X() { float x, y; Transform(g_rawX.load(), g_rawY.load(), x, y); return x; }
-float Y() { float x, y; Transform(g_rawX.load(), g_rawY.load(), x, y); return y; }
-
-void SetDisplaySize(float w, float h) { g_dw.store(w); g_dh.store(h); }
-void SetRotMode(int mode) { g_rot.store(mode); }
-int RotMode() { return g_rot.load(); }
 
 bool Install() {
     if (TryOfficialApi())   { LOGI("Touch source: official pl::input API"); return true; }
     if (TryInputQueue())    { LOGI("Touch source: AInputQueue");            return true; }
     if (TryJniCandidates()) { LOGI("Touch source: JNI touch entry");        return true; }
-    LOGE("Touch: NO SOURCE FOUND");
+    LOGE("Touch: NO SOURCE FOUND - UI loads, touch disabled for now");
     return false;
 }
 
