@@ -26,7 +26,6 @@ using EGLSwapBuffersFn = EGLBoolean (*)(EGLDisplay, EGLSurface);
 GumInterceptor* g_interceptor = nullptr;
 GumInvocationListener* g_listener = nullptr;
 std::atomic<bool> g_imguiInitialized{false};
-std::atomic<long long> g_frames{0};
 
 void InitImGui() {
     IMGUI_CHECKVERSION();
@@ -42,13 +41,12 @@ void InitImGui() {
 
     ImGui::GetIO().Fonts->AddFontDefault();
     ImGui_ImplOpenGL3_Init("#version 300 es");
-    
+
     g_imguiInitialized = true;
     LOGI("ImGui initialized");
 }
 
 void DrawOverlay(EGLDisplay display, EGLSurface surface) {
-    g_frames++;
     if (!g_imguiInitialized.load()) {
         InitImGui();
     }
@@ -58,7 +56,6 @@ void DrawOverlay(EGLDisplay display, EGLSurface surface) {
     eglQuerySurface(display, surface, EGL_WIDTH, &width);
     eglQuerySurface(display, surface, EGL_HEIGHT, &height);
     if (width <= 0 || height <= 0) return;
-    TouchHook::SetDisplaySize((float)width, (float)height);
 
     ImGui_ImplOpenGL3_NewFrame();
 
@@ -135,6 +132,5 @@ void Uninstall() {
     }
     gum_deinit_embedded();
 }
-long long FrameCount() { return g_frames.load(); }
 
 }
