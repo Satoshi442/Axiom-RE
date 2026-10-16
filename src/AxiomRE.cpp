@@ -1,6 +1,5 @@
 #include <pl/Mod.hpp>
 #include <android/log.h>
-
 #include "hooks/RenderHook.h"
 #include "hooks/TouchHook.h"
 #include "ui/AxiomUI.h"
@@ -15,41 +14,19 @@ class AxiomRE {
 public:
     bool load(pl::mod::ModContext &context) {
         LOGI("=== Axiom-RE LOADING ===");
-
         AxiomUI::Init(context.modRootPath().string());
-
-        Disasm::Initialize();
-        Memory::Refresh();
-
+        Disasm::Initialize(); Memory::Refresh();
         if (!RenderHook::Install()) LOGE("Failed to install render hook!");
-        if (!TouchHook::Install())  LOGE("Touch hook failed (UI still works)");
-
+        if (!TouchHook::Install()) LOGE("Touch hook failed (UI still works)");
         AxiomUI::Show();
-        LOGI("=== Axiom-RE LOADED ===");
-        return true;
+        LOGI("=== Axiom-RE LOADED ==="); return true;
     }
-
-    bool enable(pl::mod::ModContext &context) {
-        LOGI("Axiom-RE ENABLED");
-        AxiomUI::Show();
-        return true;
-    }
-
-    bool disable(pl::mod::ModContext &context) {
-        LOGI("Axiom-RE DISABLED");
-        AxiomUI::Hide();
-        return true;
-    }
-
+    bool enable(pl::mod::ModContext &context) { LOGI("Axiom-RE ENABLED"); AxiomUI::Show(); return true; }
+    bool disable(pl::mod::ModContext &context) { LOGI("Axiom-RE DISABLED"); AxiomUI::Hide(); return true; }
     bool unload(pl::mod::ModContext &context) {
-        LOGI("Axiom-RE UNLOADING");
-        Disasm::Shutdown();
-        TouchHook::Uninstall();
-        RenderHook::Uninstall();
-        LOGI("Axiom-RE UNLOADED");
-        return true;
+        LOGI("Axiom-RE UNLOADING"); Disasm::Shutdown(); TouchHook::Uninstall(); RenderHook::Uninstall();
+        LOGI("Axiom-RE UNLOADED"); return true;
     }
 };
-
 AxiomRE g_axiomRE;
 PL_REGISTER_MOD(AxiomRE, g_axiomRE)
