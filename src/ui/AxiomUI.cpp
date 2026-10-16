@@ -142,12 +142,16 @@ void DrawFloatingToggle() {
     }
 
     if (ImGui::IsItemReleased()) {
+        static bool wasActive = false;
+    bool isActive = ImGui::IsItemActive();
+    if (wasActive && !isActive) {
         if (g_dragDist < 12.0f) {
-            g_visible = !g_visible.load();   // tap = toggle
+            g_visible = !g_visible.load();
         } else {
-            SaveSettings();                  // drag end = save position
+            SaveSettings();
         }
     }
+    wasActive = isActive;
 
     ImVec2 mn = ImGui::GetItemRectMin();
     ImVec2 mx = ImGui::GetItemRectMax();
