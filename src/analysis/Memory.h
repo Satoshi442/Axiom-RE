@@ -11,18 +11,10 @@ struct MemoryModule {
     uintptr_t end;
 };
 
-struct MemoryRange {
-    uintptr_t start;
-    uintptr_t end;
-    std::string perms;
-    std::string path;
-};
-
 namespace Memory {
 
 void Refresh();
 const std::vector<MemoryModule>& Modules();
-const std::vector<MemoryRange>& Ranges();
 
 bool IsReadable(uintptr_t addr, size_t len);
 bool IsWritable(uintptr_t addr, size_t len);
