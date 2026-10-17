@@ -17,14 +17,27 @@ target_compile_definitions(imgui PUBLIC IMGUI_IMPL_OPENGL_ES3)
 # --- Fmt ---
 add_subdirectory(deps/fmt)
 
-# --- Capstone ---
-set(CAPSTONE_BUILD_STATIC ON CACHE BOOL "" FORCE)
-set(CAPSTONE_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+# --- Capstone 6 (AArch64) ---
+set(CAPSTONE_BUILD_STATIC_LIBS ON CACHE BOOL "" FORCE)
+set(CAPSTONE_BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+set(CAPSTONE_BUILD_LEGACY_TESTS OFF CACHE BOOL "" FORCE)
 set(CAPSTONE_BUILD_CSTOOL OFF CACHE BOOL "" FORCE)
-set(CAPSTONE_ARM64_SUPPORT ON CACHE BOOL "Enable ARM64 support" FORCE)
 set(CAPSTONE_ARCHITECTURE_DEFAULT OFF CACHE BOOL "Disable default architectures" FORCE)
 set(CAPSTONE_ARM_SUPPORT ON CACHE BOOL "Enable ARM support" FORCE)
+set(CAPSTONE_AARCH64_SUPPORT ON CACHE BOOL "Enable AArch64 support" FORCE)
 add_subdirectory(deps/capstone)
+
+# Capstone 6 also builds a fuzzer executable; keep it out of the Android build.
+if(TARGET fuzz_disasm)
+    set_target_properties(fuzz_disasm PROPERTIES EXCLUDE_FROM_ALL ON)
+endif()
+
+# In v6 `capstone` is only an object library; the static lib is `capstone_static`.
+if(TARGET capstone_static)
+    set(CAPSTONE_LIB capstone_static)
+else()
+    set(CAPSTONE_LIB capstone)
+endif()
 
 # --- Frida-Gum ---
 add_library(frida_gum STATIC IMPORTED)
@@ -52,10 +65,9 @@ target_include_directories(axiom_re PRIVATE
 )
 
 # Scoped definitions are preferred over global add_definitions()
+# (Capstone defines its own CAPSTONE_HAS_* macros internally.)
 target_compile_definitions(axiom_re PRIVATE 
     IMGUI_IMPL_OPENGL_ES3
-    CAPSTONE_HAS_ARM64
-    CAPSTONE_HAS_ARM
 )
 
 # --- Linking ---
@@ -66,7 +78,7 @@ find_library(m-lib m)
 target_link_libraries(axiom_re PRIVATE 
     imgui 
     frida_gum 
-    capstone 
+    ${CAPSTONE_LIB} 
     fmt::fmt 
     EGL 
     GLESv3 
@@ -77,5 +89,3 @@ target_link_libraries(axiom_re PRIVATE
     dl 
     c
 )
-
-# NOTE: Removed "-Wl,--unresolved-symbols=ignore-all" (See explanation below)
