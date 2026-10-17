@@ -18,7 +18,7 @@ set(CAPSTONE_ARM64_SUPPORT ON CACHE BOOL "Enable ARM64 support" FORCE)
 # If your project disables all architectures by default, you might also need:
 set(CAPSTONE_ARCHITECTURE_DEFAULT OFF CACHE BOOL "Disable default architectures" FORCE)
 set(CAPSTONE_ARM_SUPPORT ON CACHE BOOL "Enable ARM support" FORCE) # If you also need 32-bit ARM
-
+add_definitions(-DCAPSTONE_HAS_ARM64 -DCAPSTONE_HAS_ARM)
 add_subdirectory(deps/capstone)
 
 add_library(frida_gum STATIC IMPORTED)
