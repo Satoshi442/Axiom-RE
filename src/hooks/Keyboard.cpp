@@ -33,9 +33,19 @@ using RegKeyFn = void (*)(pl::input::KeyCallback);
 ShowFn g_show = nullptr;
 ShowFn g_hide = nullptr;
 
+void* PreloaderHandle() {
+    static void* h = dlopen("libpreloader.so", RTLD_NOW | RTLD_NOLOAD);
+    return h;
+}
+
 void* Try(const char* a, const char* b = nullptr) {
-    void* p = dlsym(RTLD_DEFAULT, a);
-    if (!p && b) p = dlsym(RTLD_DEFAULT, b);
+    void* h = PreloaderHandle();
+    void* p = h ? dlsym(h, a) : nullptr;
+    if (!p) p = dlsym(RTLD_DEFAULT, a);
+    if (!p && b) {
+        p = h ? dlsym(h, b) : nullptr;
+        if (!p) p = dlsym(RTLD_DEFAULT, b);
+    }
     return p;
 }
 
