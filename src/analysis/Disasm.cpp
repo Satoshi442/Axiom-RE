@@ -1,59 +1,73 @@
 #include "Disasm.h"
 
-#include <capstone/capstone.h>
 #include <android/log.h>
+#include <capstone/capstone.h>
+
+#include <cstring>
+#include <vector>
+
+#include "Memory.h"
 
 #define LOG_TAG "Axiom-RE"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
 
 namespace {
-    csh g_handle = 0;
-    bool g_initialized = false;
+csh g_handle = 0;
+bool g_ready = false;
 }
 
 namespace Disasm {
 
 bool Initialize() {
-    cs_err err = cs_open(CS_ARCH_AARCH64, CS_MODE_ARM, &g_handle);
-    if (err != CS_ERR_OK) {
-        LOGE("Capstone init failed: %s", cs_strerror(err));
-        return false;
+    if (cs_open(CS_ARCH_ARM64, CS_MODE_ARM, &g_handle) == CS_ERR_OK) {
+        cs_option(g_handle, CS_OPT_DETAIL, CS_OPT_OFF);
+        g_ready = true;
+        LOGI("Capstone disassembler initialized");
+        return true;
     }
-    cs_option(g_handle, CS_OPT_DETAIL, CS_OPT_ON);
-    g_initialized = true;
-    LOGI("Capstone disassembler initialized");
-    return true;
+    LOGE("Capstone failed to initialize");
+    return false;
 }
 
 void Shutdown() {
-    if (g_initialized) {
-        cs_close(&g_handle);
-        g_initialized = false;
-    }
+    if (g_ready) cs_close(&g_handle);
+    g_ready = false;
 }
 
-std::vector<DisasmInstruction> Disassemble(uint64_t address, size_t size, int count) {
-    std::vector<DisasmInstruction> results;
-    if (!g_initialized) return results;
+std::vector<DisasmInstruction> Disassemble(uint64_t addr, size_t maxBytes, size_t maxCount) {
+    std::vector<DisasmInstruction> out;
+    if (!g_ready || addr == 0) return out;
+    if (maxBytes > 4096) maxBytes = 4096;
+    if (maxCount == 0 || maxCount > 512) maxCount = 512;
 
-    const uint8_t* code = reinterpret_cast<const uint8_t*>(address);
-    cs_insn* insn = nullptr;
-    size_t disasmCount = cs_disasm(g_handle, code, size, address, count, &insn);
-
-    if (disasmCount > 0) {
-        for (size_t i = 0; i < disasmCount; i++) {
-            DisasmInstruction inst;
-            inst.address = insn[i].address;
-            inst.mnemonic = insn[i].mnemonic;
-            inst.opStr = insn[i].op_str;
-            inst.fullText = std::string(insn[i].mnemonic) + " " + insn[i].op_str;
-            results.push_back(inst);
-        }
-        cs_free(insn, disasmCount);
+    // SAFE read: 4 bytes at a time through the maps-checked Memory::Read.
+    // Unmapped / unreadable address just stops the loop -> empty result, NO crash.
+    std::vector<uint8_t> buf;
+    buf.reserve(maxBytes);
+    for (size_t off = 0; off < maxBytes; off += 4) {
+        uint32_t word = 0;
+        if (!Memory::Read(addr + off, &word, 4)) break;
+        buf.push_back((uint8_t)(word & 0xFF));
+        buf.push_back((uint8_t)((word >> 8) & 0xFF));
+        buf.push_back((uint8_t)((word >> 16) & 0xFF));
+        buf.push_back((uint8_t)((word >> 24) & 0xFF));
     }
+    if (buf.empty()) return out;
 
-    return results;
+    cs_insn* insn = nullptr;
+    size_t count = cs_disasm(g_handle, buf.data(), buf.size(), addr, maxCount, &insn);
+    if (count > 0 && insn) {
+        for (size_t i = 0; i < count; i++) {
+            DisasmInstruction d;
+            d.address = insn[i].address;
+            d.mnemonic = insn[i].mnemonic;
+            d.opStr = insn[i].op_str;
+            out.push_back(d);
+        }
+        cs_free(insn, count);
+    }
+    return out;
 }
 
 }
