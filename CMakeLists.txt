@@ -20,6 +20,7 @@ set_target_properties(frida_gum PROPERTIES IMPORTED_LOCATION "${CMAKE_CURRENT_SO
 add_library(axiom_re SHARED
     src/AxiomRE.cpp src/hooks/RenderHook.cpp src/hooks/TouchHook.cpp
     src/ui/AxiomUI.cpp src/analysis/Disasm.cpp src/analysis/Memory.cpp
+    src/hooks/Keyboard.cpp
 )
 
 target_include_directories(axiom_re PRIVATE
