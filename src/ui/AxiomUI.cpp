@@ -48,35 +48,53 @@ namespace {
     char g_inspAddr[32]="0x0"; uint64_t g_inspAddrVal=0; int g_inspType=2; char g_inspWrite[32]="";
     float g_demoValue=100.0f; bool g_demoAnimate=true; float g_dragDist=0.0f;
 
-    void DrawFloatingToggle() {
-        ImGuiIO& io = ImGui::GetIO(); ImVec2 ds = io.DisplaySize; if (ds.x < 10) return;
-        if (g_settings.ballX < 0) { g_settings.ballX = ds.x - 110; g_settings.ballY = 60; }
-        if (g_settings.ballX < 0) g_settings.ballX = 0; if (g_settings.ballY < 0) g_settings.ballY = 0;
-        if (g_settings.ballX > ds.x - 80) g_settings.ballX = ds.x - 80; if (g_settings.ballY > ds.y - 80) g_settings.ballY = ds.y - 80;
+void DrawFloatingToggle() {
+    ImGuiIO& io = ImGui::GetIO(); ImVec2 ds = io.DisplaySize; if (ds.x < 10) return;
+    if (g_settings.ballX < 0) { g_settings.ballX = ds.x - 110; g_settings.ballY = 60; }
+    if (g_settings.ballX < 0) g_settings.ballX = 0; if (g_settings.ballY < 0) g_settings.ballY = 0;
+    if (g_settings.ballX > ds.x - 80) g_settings.ballX = ds.x - 80; if (g_settings.ballY > ds.y - 80) g_settings.ballY = ds.y - 80;
 
-        ImGui::SetNextWindowPos({g_settings.ballX, g_settings.ballY}, ImGuiCond_Always);
-        ImGui::SetNextWindowSize({80, 80});
-        ImGui::Begin("##AxiomBall", nullptr, ImGuiWindowFlags_NoTitleBar|ImGuiWindowFlags_NoResize|ImGuiWindowFlags_NoScrollbar|ImGuiWindowFlags_NoSavedSettings|ImGuiWindowFlags_NoCollapse|ImGuiWindowFlags_NoBackground);
-        ImGui::InvisibleButton("##ballbtn", {80, 80});
-        if (ImGui::IsItemActivated()) g_dragDist = 0;
-        if (ImGui::IsItemActive()) { g_settings.ballX += io.MouseDelta.x; g_settings.ballY += io.MouseDelta.y; g_dragDist += fabsf(io.MouseDelta.x) + fabsf(io.MouseDelta.y); }
+    ImGui::SetNextWindowPos({g_settings.ballX, g_settings.ballY}, ImGuiCond_Always);
+    ImGui::SetNextWindowSize({80, 80});
+    ImGui::Begin("##AxiomBall", nullptr, ImGuiWindowFlags_NoTitleBar|ImGuiWindowFlags_NoResize|ImGuiWindowFlags_NoScrollbar|ImGuiWindowFlags_NoSavedSettings|ImGuiWindowFlags_NoCollapse|ImGuiWindowFlags_NoBackground);
+    ImGui::InvisibleButton("##ballbtn", {80, 80});
 
-        static bool wasActive = false;
-        bool isActive = ImGui::IsItemActive();
-        if (wasActive && !isActive) {
-            if (g_dragDist < 12) g_visible = !g_visible.load();
-            else SaveSettings();
-        }
-        wasActive = isActive;
+    static bool wasActive = false;
+    static ImVec2 startPos = {0, 0};
+    bool isActive = ImGui::IsItemActive();
 
-        ImVec2 mn = ImGui::GetItemRectMin(), mx = ImGui::GetItemRectMax();
-        ImVec2 center((mn.x+mx.x)*0.5f, (mn.y+mx.y)*0.5f);
-        ImDrawList* dl = ImGui::GetWindowDrawList();
-        dl->AddCircleFilled(center, 36, AccentU32());
-        dl->AddCircle(center, 36, IM_COL32(255,255,255,200), 0, 2);
-        dl->AddText(nullptr, 20, {center.x-14, center.y-11}, IM_COL32(0,0,0,255), "AX");
-        ImGui::End();
+    if (ImGui::IsItemActivated()) {
+        startPos = io.MousePos;
+        g_dragDist = 0;
     }
+
+    if (isActive) {
+        float dx = io.MousePos.x - startPos.x;
+        float dy = io.MousePos.y - startPos.y;
+        g_dragDist = sqrtf(dx*dx + dy*dy);
+        if (g_dragDist > 15) {  // Only move if dragged more than 15 pixels
+            g_settings.ballX += io.MouseDelta.x;
+            g_settings.ballY += io.MouseDelta.y;
+        }
+    }
+
+    if (wasActive && !isActive) {
+        if (g_dragDist < 20) {  // Tap = less than 20 pixels movement
+            g_visible = !g_visible.load();
+        } else {
+            SaveSettings();
+        }
+    }
+    wasActive = isActive;
+
+    ImVec2 mn = ImGui::GetItemRectMin(), mx = ImGui::GetItemRectMax();
+    ImVec2 center((mn.x+mx.x)*0.5f, (mn.y+mx.y)*0.5f);
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    dl->AddCircleFilled(center, 36, AccentU32());
+    dl->AddCircle(center, 36, IM_COL32(255,255,255,200), 0, 2);
+    dl->AddText(nullptr, 20, {center.x-14, center.y-11}, IM_COL32(0,0,0,255), "AX");
+    ImGui::End();
+}
 
     void DrawMemoryTab() {
         if (g_demoAnimate) g_demoValue = 100.0f + 50.0f * sinf((float)ImGui::GetTime() * 2.0f);
