@@ -29,5 +29,5 @@ target_include_directories(axiom_re PRIVATE
 target_compile_definitions(axiom_re PRIVATE IMGUI_IMPL_OPENGL_ES3)
 
 find_library(log-lib log)
-target_link_libraries(axiom_re PRIVATE imgui frida_gum capstone fmt::fmt EGL GLESv3 ${log-lib} dl)
+target_link_libraries(axiom_re PRIVATE imgui frida_gum capstone fmt::fmt EGL GLESv3 android ${log-lib} dl)
 target_link_options(axiom_re PRIVATE -Wl,--unresolved-symbols=ignore-all)
