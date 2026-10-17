@@ -1,29 +1,24 @@
 #include "Keyboard.h"
-
 #include <android/log.h>
 #include <dlfcn.h>
 #include <elf.h>
 #include <jni.h>
 #include <link.h>
 #include <unistd.h>
-
 #include <atomic>
 #include <cstdio>
 #include <cstring>
 #include <pl/Input.hpp>
-
 #include "imgui.h"
 
 #define LOG_TAG "Axiom-RE"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
 
 namespace {
-
 const char* GATE_PATHS[] = {
     "/storage/emulated/0/Android/media/org.levimc.launcher/axiom_kb_enable.txt",
     "/sdcard/Android/media/org.levimc.launcher/axiom_kb_enable.txt",
 };
-
 char g_status[160] = "not installed";
 bool g_enabled = false;
 bool g_haveTextCb = false;
@@ -32,11 +27,9 @@ bool g_shown = false;
 using ShowFn = void (*)();
 using RegTextFn = void (*)(pl::input::TextInputCallback);
 using RegKeyFn = void (*)(pl::input::KeyCallback);
-
 ShowFn g_show = nullptr;
 ShowFn g_hide = nullptr;
 
-// ---------- ELF dynsym substring scanner (no mangled names!) ----------
 struct ScanCtx { const char* needle; void* out; };
 
 bool ScanLib(const struct dl_phdr_info* info, const char* needle, void** out) {
@@ -48,7 +41,6 @@ bool ScanLib(const struct dl_phdr_info* info, const char* needle, void** out) {
         }
     }
     if (!dyn) return false;
-
     const ElfW(Sym)* sym = nullptr;
     const char* str = nullptr;
     size_t strsz = 0;
@@ -58,11 +50,9 @@ bool ScanLib(const struct dl_phdr_info* info, const char* needle, void** out) {
         else if (d->d_tag == DT_STRSZ) strsz = d->d_un.d_val;
     }
     if (!sym || !str || !strsz) return false;
-
     for (size_t i = 1; i < 300000; i++) {
         ElfW(Word) n = sym[i].st_name;
-        if (n == 0) continue;
-        if (n >= strsz) break;
+        if (n == 0 || n >= strsz) continue;
         if (sym[i].st_value && strstr(str + n, needle)) {
             *out = (void*)(info->dlpi_addr + sym[i].st_value);
             return true;
@@ -83,7 +73,6 @@ void* FindBySubstring(const char* needle) {
     return c.out;
 }
 
-// ---------- ImGui feed ----------
 bool OnText(const pl::input::TextInputEvent& e) {
     if (!e.text.empty()) ImGui::GetIO().AddInputCharactersUTF8(e.text.c_str());
     return false;
@@ -105,13 +94,10 @@ bool OnKey(const pl::input::KeyEvent& e) {
     if (e.isKeyDown) {
         if (!nav(true) && !g_haveTextCb && e.unicodeChar != 0)
             io.AddInputCharacter(e.unicodeChar);
-    } else {
-        nav(false);
-    }
+    } else nav(false);
     return false;
 }
 
-// ---------- JNI fallback (only if launcher symbols absent) ----------
 void JniToggle() {
     JavaVM* vm = nullptr; jsize n = 0;
     using GetVmsFn = jint (*)(JavaVM**, jsize, jsize*);
@@ -141,17 +127,13 @@ void JniToggle() {
     env->ExceptionClear();
     if (detach) vm->DetachCurrentThread();
 }
-
 }
 
 namespace Keyboard {
-
 bool Enabled() {
-    for (const char* p : GATE_PATHS)
-        if (access(p, F_OK) == 0) return true;
+    for (const char* p : GATE_PATHS) if (access(p, F_OK) == 0) return true;
     return false;
 }
-
 bool Install() {
     g_enabled = Enabled();
     if (!g_enabled) {
@@ -159,31 +141,24 @@ bool Install() {
         LOGI("Keyboard: %s", g_status);
         return true;
     }
-
     g_show = (ShowFn)FindBySubstring("12showKeyboardEv");
     g_hide = (ShowFn)FindBySubstring("12hideKeyboardEv");
     auto regText = (RegTextFn)FindBySubstring("25registerTextInputCallbackE");
     auto regKey = (RegKeyFn)FindBySubstring("19registerKeyCallbackE");
-
     if (regText) { regText(OnText); g_haveTextCb = true; }
     if (regKey) regKey(OnKey);
-
     snprintf(g_status, sizeof(g_status), "gate ON show:%s hide:%s text:%s key:%s",
-             g_show ? "Y" : "N", g_hide ? "Y" : "N",
-             regText ? "Y" : "N", regKey ? "Y" : "N");
+             g_show ? "Y" : "N", g_hide ? "Y" : "N", regText ? "Y" : "N", regKey ? "Y" : "N");
     LOGI("Keyboard: %s", g_status);
     return true;
 }
-
 void Frame() {
     if (!g_enabled) return;
     bool want = ImGui::GetIO().WantTextInput;
     if (want && !g_shown) { Show(); g_shown = true; }
     else if (!want && g_shown) { Hide(); g_shown = false; }
 }
-
 void Show() { if (g_show) g_show(); else JniToggle(); }
 void Hide() { if (g_hide) g_hide(); else JniToggle(); }
 const char* Status() { return g_status; }
-
 }
