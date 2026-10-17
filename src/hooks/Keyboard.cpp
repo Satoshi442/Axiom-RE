@@ -118,14 +118,13 @@ bool Enabled() {
 bool Install() {
     g_enabled = Enabled();
     if (!g_enabled) {
-        snprintf(g_status, sizeof(g_status), "gate OFF (create axiom_kb_enable.txt to enable)");
+        snprintf(g_status, sizeof(g_status), "gate OFF");
         LOGI("Keyboard: %s", g_status);
         return true;
     }
 
     g_show = (ShowFn)Try("_ZN2pl5input12showKeyboardEv");
     g_hide = (ShowFn)Try("_ZN2pl5input12hideKeyboardEv");
-
     auto regText = (RegTextFn)Try(
         "_ZN2pl5input25registerTextInputCallbackENSt6__ndk18functionIFbRKNS0_14TextInputEventEEEE",
         "_ZN2pl5input25registerTextInputCallbackENSt3__18functionIFbRKNS0_14TextInputEventEEEE");
