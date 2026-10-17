@@ -20,7 +20,7 @@ bool g_ready = false;
 namespace Disasm {
 
 bool Initialize() {
-    if (cs_open(CS_ARCH_ARM64, CS_MODE_ARM, &g_handle) == CS_ERR_OK) {
+    if (cs_open(CS_ARCH_AARCH64, CS_MODE_LITTLE_ENDIAN, &g_handle) == CS_ERR_OK) {
         cs_option(g_handle, CS_OPT_DETAIL, CS_OPT_OFF);
         g_ready = true;
         LOGI("Capstone disassembler initialized");
