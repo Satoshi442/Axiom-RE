@@ -10,6 +10,7 @@
 #include "../analysis/Disasm.h"
 #include "../analysis/Memory.h"
 #include "../hooks/TouchHook.h"
+#include "../hooks/Keyboard.h"  
 
 namespace {
     std::atomic<bool> g_visible{true};
@@ -150,6 +151,11 @@ namespace {
         ImGui::Checkbox("Maximize Main Window", &g_settings.maximize);
         if (ImGui::Button("Reset Ball Position")) { g_settings.ballX = io.DisplaySize.x - 110; g_settings.ballY = 60; }
         ImGui::SameLine(); if (ImGui::Button("Save Settings")) SaveSettings();
+        ImGui::Separator();
+    ImGui::Text("Keyboard: %s", Keyboard::Status());
+    if (ImGui::Button("KB Show")) Keyboard::Show();
+    ImGui::SameLine();
+    if (ImGui::Button("KB Hide")) Keyboard::Hide();
     }
 }
 
