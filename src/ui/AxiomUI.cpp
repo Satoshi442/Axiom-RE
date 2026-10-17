@@ -10,7 +10,7 @@
 #include "../analysis/Disasm.h"
 #include "../analysis/Memory.h"
 #include "../hooks/TouchHook.h"
-#include "../hooks/Keyboard.h"  
+#include "../hooks/Keyboard.h"
 
 namespace {
     std::atomic<bool> g_visible{true};
