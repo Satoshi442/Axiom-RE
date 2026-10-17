@@ -194,6 +194,8 @@ namespace AxiomUI {
             if (!g_iniPath.empty()) io.IniFilename = g_iniPath.c_str();
             first = false;
         }
+        
+        Keyboard::Frame();
 
         DrawFloatingToggle();
         if (!g_visible.load()) return;
