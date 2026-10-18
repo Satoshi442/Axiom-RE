@@ -52,6 +52,7 @@ add_library(axiom_re SHARED
     src/analysis/Disasm.cpp 
     src/analysis/Memory.cpp
     src/hooks/Keyboard.cpp
+    src/hooks/Clipboard.cpp
 )
 
 target_include_directories(axiom_re PRIVATE
