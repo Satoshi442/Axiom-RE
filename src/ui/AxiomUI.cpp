@@ -11,6 +11,7 @@
 #include "../analysis/Memory.h"
 #include "../hooks/TouchHook.h"
 #include "../hooks/Keyboard.h"
+#include "../hooks/Clipboard.h"
 
 namespace {
     std::atomic<bool> g_visible{true};
@@ -158,6 +159,41 @@ void DrawFloatingToggle() {
         ImGui::Separator();
         if (ImGui::Button("Demo Var (writable test)")) { g_inspAddrVal = (uint64_t)&g_demoValue; snprintf(g_inspAddr, sizeof(g_inspAddr), "%llX", (unsigned long long)g_inspAddrVal); g_inspType = 4; }
         ImGui::SameLine(); ImGui::Checkbox("Animate", &g_demoAnimate);
+
+        ImGui::SetNextItemWidth(160.0f);
+    ImGui::InputText("##memaddr", g_memAddr, sizeof(g_memAddr));
+    ImGui::SameLine();
+    if (ImGui::Button("Paste")) {
+        std::string clip = Clipboard::GetText();
+        if (!clip.empty()) {
+            strncpy(g_memAddr, clip.c_str(), sizeof(g_memAddr) - 1);
+            g_memAddr[sizeof(g_memAddr) - 1] = '\0';
+        }
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Go")) {
+        uint64_t a = strtoull(g_memAddr, nullptr, 16);
+        if (a) g_viewAddr = a;
+    }
+    ImGui::SetNextItemWidth(160.0f);
+    ImGui::InputText("##inspaddr", g_inspAddr, sizeof(g_inspAddr));
+    ImGui::SameLine();
+    if (ImGui::Button("Paste")) {
+        std::string clip = Clipboard::GetText();
+        if (!clip.empty()) {
+            strncpy(g_inspAddr, clip.c_str(), sizeof(g_inspAddr) - 1);
+            g_inspAddr[sizeof(g_inspAddr) - 1] = '\0';
+        }
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Copy")) {
+        Clipboard::SetText(g_inspAddr);
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Read")) {
+        uint64_t a = strtoull(g_inspAddr, nullptr, 16);
+        if (a) g_inspAddrVal = a;
+    }    
     }
 
     void DrawSettingsTab() {
